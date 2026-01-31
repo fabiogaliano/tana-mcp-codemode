@@ -12,7 +12,7 @@
  */
 
 import { Database } from "bun:sqlite";
-import { initDb } from "./history";
+import { initDb } from "../storage/history";
 
 export type WorkflowEventType =
   | "start"

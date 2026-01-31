@@ -10,7 +10,7 @@ import { Database } from "bun:sqlite";
 import { homedir } from "os";
 import { join } from "path";
 import { mkdirSync, existsSync } from "fs";
-import type { ScriptRun } from "./types";
+import type { ScriptRun } from "../types";
 
 let db: Database | null = null;
 

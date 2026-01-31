@@ -1,185 +1,131 @@
 /**
  * Tool Description - Markdown Documentation
- *
- * This serves as the tool's description that AI models see.
- * Comprehensive examples help the AI understand how to use the API.
  */
 
 export const TOOL_DESCRIPTION = `Execute TypeScript code to interact with Tana.
 
 ## Available APIs
 
-### Workspaces
-\`\`\`typescript
+\`\`\`
+await tana.health()  // → { status: "ok" }
 await tana.workspaces.list()  // → Workspace[] (id, name, homeNodeId)
 \`\`\`
 
 ### Nodes
-\`\`\`typescript
+\`\`\`
 await tana.nodes.search(query, options?)     // → SearchResult[]
 await tana.nodes.read(nodeId, maxDepth?)     // → string (markdown)
 await tana.nodes.getChildren(nodeId, opts?)  // → { children, total, hasMore }
-await tana.nodes.edit({ nodeId, name?, description? })  // → { success }
+await tana.nodes.edit({ nodeId, name?, description? })  // → { success } (see Edit below)
 await tana.nodes.trash(nodeId)               // → { success }
 await tana.nodes.check(nodeId)               // → { success } (mark done)
 await tana.nodes.uncheck(nodeId)             // → { success } (mark undone)
 \`\`\`
 
 ### Tags (Supertags)
-\`\`\`typescript
+\`\`\`
 await tana.tags.list(workspaceId, limit?)    // → Tag[]
 await tana.tags.getSchema(tagId, includeEditInstructions?)  // → string (markdown)
 await tana.tags.modify(nodeId, action, tagIds)  // action: "add" | "remove"
 await tana.tags.create({ workspaceId, name, description?, extendsTagIds?, showCheckbox? })
 await tana.tags.addField({ tagId, name, dataType, ... })
+// dataType: "plain" | "number" | "date" | "url" | "email" | "checkbox" | "user" | "instance" | "options"
 await tana.tags.setCheckbox({ tagId, showCheckbox, doneStateMapping? })
 \`\`\`
 
 ### Fields
-\`\`\`typescript
+\`\`\`
 await tana.fields.setOption(nodeId, attributeId, optionId)   // for dropdown fields
 await tana.fields.setContent(nodeId, attributeId, content)   // for text/date/url fields
 \`\`\`
 
 ### Calendar
-\`\`\`typescript
+\`\`\`
 await tana.calendar.getOrCreate(workspaceId, granularity, date?)
 // granularity: "day" | "week" | "month" | "year"
 \`\`\`
 
 ### Import (Tana Paste)
-\`\`\`typescript
+\`\`\`
 await tana.import(parentNodeId, tanaPasteContent)  // → { success, nodeIds?, error? }
 \`\`\`
 
-### Utility
-\`\`\`typescript
-await tana.health()  // → { status: "ok" }
+### Entry Points
+\`\`\`
+const inbox = \`\${workspaceId}_CAPTURE_INBOX\`;  // Quick capture inbox
+const library = \`\${workspaceId}_STASH\`;        // Library/stash
 \`\`\`
 
-### stdin() - Input Data Helper
-Pass data to scripts via the \`input\` parameter, then access it with \`stdin()\`:
-\`\`\`typescript
-// Parse JSON input
-const data = stdin().json<{ ids: string[] }>();
-console.log("Processing", data.ids.length, "items");
+### Helpers
+\`\`\`
+// stdin() - access input parameter
+stdin().json<T>()    // parse JSON
+stdin().lines()      // split by newlines
+stdin().text()       // raw string
+stdin().hasInput()   // check if input exists
 
-// Get lines (for lists)
-const lines = stdin().lines();
-for (const line of lines) {
-  console.log("Line:", line);
-}
-
-// Raw text
-const text = stdin().text();
-
-// Check if input exists
-if (stdin().hasInput()) {
-  // process input
-}
+// workflow - progress tracking
+workflow.start("msg")
+workflow.step("msg")
+workflow.progress(current, total, "msg")
+workflow.complete("msg") // or workflow.abort("error")
 \`\`\`
 
-### workflow - Progress Tracking
-Track multi-step operations with timeline events:
-\`\`\`typescript
-workflow.start("Processing nodes");
-workflow.step("Fetching workspaces");
-const workspaces = await tana.workspaces.list();
-workflow.progress(1, workspaces.length, "Processing");
-// ... do work ...
-workflow.complete("Done!");
-// Or on failure: workflow.abort("Error: could not connect");
+## Edit Node
+
+Uses search-and-replace:
 \`\`\`
-
----
-
-## Search Query Examples
-
-**Find by text:**
-\`\`\`typescript
-const results = await tana.nodes.search({ textContains: "meeting notes" });
-\`\`\`
-
-**Find by tag:**
-\`\`\`typescript
-const projects = await tana.nodes.search({ hasType: "projectTagId" });
-\`\`\`
-
-**Complex query (AND):**
-\`\`\`typescript
-const results = await tana.nodes.search({
-  and: [
-    { hasType: "taskTagId" },
-    { is: "todo" },
-    { created: { last: 7 } }
-  ]
+await tana.nodes.edit({
+  nodeId: "abc123",
+  name: { old_string: "Draft:", new_string: "Final:" },
+  description: { old_string: "", new_string: "Added" }  // empty matches absent
 });
 \`\`\`
 
-**Find with field value:**
-\`\`\`typescript
-const results = await tana.nodes.search({
-  hasType: "bookTagId",
-  field: { fieldId: "statusFieldId", stringValue: "Reading" }
-});
+## Search Query Reference
+
+| Operator | Description |
+|----------|-------------|
+| \`textContains\` | Case-insensitive substring match |
+| \`textMatches\` | Regex pattern (e.g., \`/meeting.*/i\`) |
+| \`hasType\` | Find nodes with tag ID |
+| \`field\` | Match field value: \`{ fieldId, stringValue?, numberValue?, nodeId?, state? }\` |
+| \`compare\` | Compare field: \`{ fieldId, operator: "gt"\\|"lt"\\|"eq", value, type }\` |
+| \`childOf\` | Children of nodes: \`{ nodeIds, recursive?, includeRefs? }\` |
+| \`ownedBy\` | Owned by node: \`{ nodeId, recursive?, includeSelf? }\` |
+| \`linksTo\` | Nodes linking to IDs: \`["nodeId1", "nodeId2"]\` |
+| \`is\` | Node type: \`"done"\\|"todo"\\|"template"\\|"entity"\\|"calendarNode"\\|"search"\\|"inLibrary"\` |
+| \`has\` | Has content: \`"tag"\\|"field"\\|"media"\\|"audio"\\|"video"\\|"image"\` |
+| \`created\` | Created in last N days: \`{ last: 7 }\` |
+| \`edited\` | Edited recently: \`{ last?: N, by?: email, since?: timestamp }\` |
+| \`done\` | Completed in last N days: \`{ last: 7 }\` |
+| \`onDate\` | On date: \`"2024-03-15"\` or \`{ date, fieldId?, overlaps? }\` |
+| \`overdue\` | Tasks past due date: \`true\` |
+| \`inLibrary\` | Nodes in library/stash: \`true\` |
+| \`and\` | All conditions match: \`[...queries]\` |
+| \`or\` | Any condition matches: \`[...queries]\` |
+| \`not\` | Negate condition: \`{ ...query }\` |
+
+## Examples
+
+**Search:**
+\`\`\`
+await tana.nodes.search({ textContains: "meeting" });
+await tana.nodes.search({ hasType: "tagId", field: { fieldId: "status", stringValue: "Active" } });
+await tana.nodes.search({ and: [{ hasType: "taskId" }, { is: "todo" }, { created: { last: 7 } }] });
 \`\`\`
 
----
-
-## Import Examples
-
-**Simple nodes:**
-\`\`\`typescript
-await tana.import(parentNodeId, \`
-- First item
-  - Nested child
-- Second item
-\`);
+**Import:**
 \`\`\`
-
-**With tags and fields:**
-\`\`\`typescript
 await tana.import(parentNodeId, \`
 - Project Alpha #[[^projectTagId]]
   - [[^statusFieldId]]:: Active
   - [[^dueDateFieldId]]:: [[date:2024-03-15]]
+- [ ] Task item
 \`);
 \`\`\`
-
-**Task with checkbox:**
-\`\`\`typescript
-await tana.import(parentNodeId, \`
-- [ ] Review proposal
-- [x] Send email
-\`);
-\`\`\`
-
----
 
 ## Output
 
 Use \`console.log()\` to return data. Only logged output is returned.
-
-\`\`\`typescript
-const workspaces = await tana.workspaces.list();
-console.log({ workspaces });
-
-const results = await tana.nodes.search({ textContains: "meeting" });
-console.log("Found:", results.length, "nodes");
-\`\`\`
-
-## Passing Data to Scripts
-
-Use the \`input\` parameter to pass data that scripts can read via \`stdin()\`:
-
-\`\`\`typescript
-// Tool call: { "code": "...", "input": "{\\"nodeIds\\": [\\"abc\\"]}" }
-
-// In script:
-const { nodeIds } = stdin().json<{ nodeIds: string[] }>();
-for (const id of nodeIds) {
-  const content = await tana.nodes.read(id);
-  console.log(content);
-}
-\`\`\`
 `;

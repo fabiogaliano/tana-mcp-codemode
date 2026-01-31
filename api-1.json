@@ -1,0 +1,2686 @@
+{
+  "info": {
+    "title": "Tana Local API",
+    "version": "1.0.0",
+    "description": "High-speed local access to Tana data from the Electron desktop app.\n\n## Authentication\n\nAll endpoints (except `/health`) require Bearer token authentication.\n\n```\nAuthorization: Bearer <your-token>\n```\n\nGet your API token from **Tana Desktop > Settings > Local API**.\n\n## Quick Start\n\n1. List your workspaces: `GET /workspaces`\n2. Search for nodes: `GET /nodes/search?query={...}`\n3. Read a node: `GET /nodes/{nodeId}`\n\n## Entry Points\n\n| Entry Point | How to Get |\n|-------------|------------|\n| Home node | `GET /workspaces` returns `homeNodeId` |\n| Inbox | Deterministic: `{workspaceId}_CAPTURE_INBOX` |\n| Library | Deterministic: `{workspaceId}_STASH` |\n| Schema | Deterministic: `{workspaceId}_SCHEMA` |\n\n---\n\n## MCP (Model Context Protocol)\n\n`POST /mcp` - JSON-RPC 2.0 endpoint for AI assistant integration.\n\n### Available Tools\n\n| Tool | Type | Description |\n|------|------|-------------|\n| `list_workspaces` | Read | List available Tana workspaces |\n| `search_nodes` | Read | Search nodes using structured queries |\n| `read_node` | Read | Read node content as markdown |\n| `get_children` | Read | Get paginated children of a node |\n| `list_tags` | Read | List tags in a workspace |\n| `get_tag_schema` | Read | Get field definitions for a tag |\n| `get_or_create_calendar_node` | Mutation | Get or create calendar node for a date |\n| `tag` | Mutation | Add/remove tags from nodes |\n| `set_field_option` | Mutation | Set dropdown field values |\n| `set_field_content` | Mutation | Set text/number/date field values |\n| `import_tana_paste` | Mutation | Import hierarchical content |\n| `create_tag` | Mutation | Create new tags |\n| `add_field_to_tag` | Mutation | Add field definitions to tags |\n| `set_tag_checkbox` | Mutation | Configure checkbox for a tag |\n| `check_node` | Mutation | Mark a node as done |\n| `uncheck_node` | Mutation | Mark a node as not done |\n| `trash_node` | Mutation | Move a node to trash |\n| `edit_node` | Mutation | Edit node name/description via search-replace |\n\n### Example Request\n\n```json\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"tools/call\",\n  \"params\": { \"name\": \"list_workspaces\", \"arguments\": {} },\n  \"id\": 1\n}\n```\n"
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8262"
+    }
+  ],
+  "openapi": "3.1.1",
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health.ping",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "ok",
+                        "degraded"
+                      ]
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "nodeSpaceReady": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "timestamp",
+                    "nodeSpaceReady"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces": {
+      "get": {
+        "operationId": "workspaces.list",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "homeNodeId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "homeNodeId"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/search": {
+      "get": {
+        "operationId": "nodes.search",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "and": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "and": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 20,
+                        "items": {},
+                        "description": "All conditions must match"
+                      },
+                      "or": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 20,
+                        "items": {},
+                        "description": "At least one condition must match"
+                      },
+                      "not": {
+                        "description": "Condition must NOT match"
+                      },
+                      "hasType": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "description": "Type ID to search for"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "typeId": {
+                                "type": "string",
+                                "description": "Type ID to search for"
+                              },
+                              "includeExtensions": {
+                                "type": "boolean",
+                                "description": "Include nodes with types that extend this type (default: true)"
+                              }
+                            },
+                            "required": [
+                              "typeId"
+                            ]
+                          }
+                        ],
+                        "description": "Find nodes with a specific type/tag"
+                      },
+                      "field": {
+                        "type": "object",
+                        "properties": {
+                          "fieldId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Field/attribute ID to match"
+                          },
+                          "nodeId": {
+                            "type": "string",
+                            "description": "Match field that references this specific node ID"
+                          },
+                          "stringValue": {
+                            "type": "string",
+                            "description": "Match field with this exact string value (case-insensitive)"
+                          },
+                          "numberValue": {
+                            "type": "number",
+                            "description": "Match field with this exact numeric value"
+                          },
+                          "state": {
+                            "enum": [
+                              "defined",
+                              "undefined",
+                              "set",
+                              "notSet"
+                            ],
+                            "description": "Field presence state: defined/undefined/set/notSet"
+                          }
+                        },
+                        "required": [
+                          "fieldId"
+                        ],
+                        "description": "Match nodes by field values"
+                      },
+                      "compare": {
+                        "type": "object",
+                        "properties": {
+                          "fieldId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Field/attribute ID to compare"
+                          },
+                          "operator": {
+                            "enum": [
+                              "gt",
+                              "lt",
+                              "eq"
+                            ],
+                            "description": "Comparison operator: gt (>), lt (<), eq (=)"
+                          },
+                          "value": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              }
+                            ],
+                            "description": "Value to compare against"
+                          },
+                          "type": {
+                            "enum": [
+                              "number",
+                              "date",
+                              "string"
+                            ],
+                            "description": "Type of comparison"
+                          }
+                        },
+                        "required": [
+                          "fieldId",
+                          "operator",
+                          "value",
+                          "type"
+                        ],
+                        "description": "Compare field values"
+                      },
+                      "textContains": {
+                        "type": "string",
+                        "description": "Case-insensitive substring match in node names"
+                      },
+                      "textMatches": {
+                        "type": "string",
+                        "maxLength": 500,
+                        "description": "Regular expression pattern in /pattern/ or /pattern/i format"
+                      },
+                      "childOf": {
+                        "type": "object",
+                        "properties": {
+                          "nodeIds": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 20,
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "Parent node IDs"
+                          },
+                          "recursive": {
+                            "type": "boolean",
+                            "description": "Include all descendants (default: true)"
+                          },
+                          "includeRefs": {
+                            "type": "boolean",
+                            "description": "Include referenced nodes (default: true)"
+                          }
+                        },
+                        "required": [
+                          "nodeIds"
+                        ],
+                        "description": "Find children of specified nodes"
+                      },
+                      "ownedBy": {
+                        "type": "object",
+                        "properties": {
+                          "nodeId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Owner node ID"
+                          },
+                          "recursive": {
+                            "type": "boolean",
+                            "description": "Include all descendants (default: true)"
+                          },
+                          "includeSelf": {
+                            "type": "boolean",
+                            "description": "Include the owner node itself (default: false)"
+                          }
+                        },
+                        "required": [
+                          "nodeId"
+                        ],
+                        "description": "Find nodes owned by a specific node"
+                      },
+                      "linksTo": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 20,
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Find nodes that link to these IDs"
+                      },
+                      "is": {
+                        "enum": [
+                          "done",
+                          "todo",
+                          "template",
+                          "field",
+                          "published",
+                          "entity",
+                          "calendarNode",
+                          "onDayNode",
+                          "chat",
+                          "search",
+                          "command",
+                          "inLibrary"
+                        ],
+                        "description": "Special node type filter"
+                      },
+                      "has": {
+                        "enum": [
+                          "tag",
+                          "field",
+                          "media",
+                          "audio",
+                          "video",
+                          "image"
+                        ],
+                        "description": "Find nodes that have specific content"
+                      },
+                      "created": {
+                        "type": "object",
+                        "properties": {
+                          "last": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "description": "Number of days"
+                          }
+                        },
+                        "required": [
+                          "last"
+                        ],
+                        "description": "Find nodes created within N days"
+                      },
+                      "edited": {
+                        "type": "object",
+                        "properties": {
+                          "by": {
+                            "type": "string",
+                            "format": "email",
+                            "description": "User email to filter by"
+                          },
+                          "last": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "description": "Number of days"
+                          },
+                          "since": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "description": "Milliseconds timestamp"
+                          }
+                        },
+                        "description": "Find nodes edited within time range"
+                      },
+                      "done": {
+                        "type": "object",
+                        "properties": {
+                          "last": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "description": "Number of days"
+                          }
+                        },
+                        "required": [
+                          "last"
+                        ],
+                        "description": "Find nodes marked done within N days"
+                      },
+                      "onDate": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "description": "ISO date string (YYYY-MM-DD)"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "date": {
+                                "type": "string",
+                                "description": "ISO date string"
+                              },
+                              "fieldId": {
+                                "type": "string",
+                                "description": "Specific field to check"
+                              },
+                              "overlaps": {
+                                "type": "boolean",
+                                "description": "Check if date ranges overlap"
+                              }
+                            },
+                            "required": [
+                              "date"
+                            ]
+                          }
+                        ],
+                        "description": "Find nodes with matching dates"
+                      },
+                      "inWorkspace": {
+                        "type": "string",
+                        "description": "Limit to specific workspace ID"
+                      },
+                      "overdue": {
+                        "const": true,
+                        "description": "Find tasks with due dates in the past"
+                      },
+                      "inLibrary": {
+                        "const": true,
+                        "description": "Find nodes in the library/stash"
+                      }
+                    }
+                  },
+                  "description": "All conditions must match"
+                },
+                "or": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "and": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 20,
+                        "items": {},
+                        "description": "All conditions must match"
+                      },
+                      "or": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 20,
+                        "items": {},
+                        "description": "At least one condition must match"
+                      },
+                      "not": {
+                        "description": "Condition must NOT match"
+                      },
+                      "hasType": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "description": "Type ID to search for"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "typeId": {
+                                "type": "string",
+                                "description": "Type ID to search for"
+                              },
+                              "includeExtensions": {
+                                "type": "boolean",
+                                "description": "Include nodes with types that extend this type (default: true)"
+                              }
+                            },
+                            "required": [
+                              "typeId"
+                            ]
+                          }
+                        ],
+                        "description": "Find nodes with a specific type/tag"
+                      },
+                      "field": {
+                        "type": "object",
+                        "properties": {
+                          "fieldId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Field/attribute ID to match"
+                          },
+                          "nodeId": {
+                            "type": "string",
+                            "description": "Match field that references this specific node ID"
+                          },
+                          "stringValue": {
+                            "type": "string",
+                            "description": "Match field with this exact string value (case-insensitive)"
+                          },
+                          "numberValue": {
+                            "type": "number",
+                            "description": "Match field with this exact numeric value"
+                          },
+                          "state": {
+                            "enum": [
+                              "defined",
+                              "undefined",
+                              "set",
+                              "notSet"
+                            ],
+                            "description": "Field presence state: defined/undefined/set/notSet"
+                          }
+                        },
+                        "required": [
+                          "fieldId"
+                        ],
+                        "description": "Match nodes by field values"
+                      },
+                      "compare": {
+                        "type": "object",
+                        "properties": {
+                          "fieldId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Field/attribute ID to compare"
+                          },
+                          "operator": {
+                            "enum": [
+                              "gt",
+                              "lt",
+                              "eq"
+                            ],
+                            "description": "Comparison operator: gt (>), lt (<), eq (=)"
+                          },
+                          "value": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              }
+                            ],
+                            "description": "Value to compare against"
+                          },
+                          "type": {
+                            "enum": [
+                              "number",
+                              "date",
+                              "string"
+                            ],
+                            "description": "Type of comparison"
+                          }
+                        },
+                        "required": [
+                          "fieldId",
+                          "operator",
+                          "value",
+                          "type"
+                        ],
+                        "description": "Compare field values"
+                      },
+                      "textContains": {
+                        "type": "string",
+                        "description": "Case-insensitive substring match in node names"
+                      },
+                      "textMatches": {
+                        "type": "string",
+                        "maxLength": 500,
+                        "description": "Regular expression pattern in /pattern/ or /pattern/i format"
+                      },
+                      "childOf": {
+                        "type": "object",
+                        "properties": {
+                          "nodeIds": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 20,
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "Parent node IDs"
+                          },
+                          "recursive": {
+                            "type": "boolean",
+                            "description": "Include all descendants (default: true)"
+                          },
+                          "includeRefs": {
+                            "type": "boolean",
+                            "description": "Include referenced nodes (default: true)"
+                          }
+                        },
+                        "required": [
+                          "nodeIds"
+                        ],
+                        "description": "Find children of specified nodes"
+                      },
+                      "ownedBy": {
+                        "type": "object",
+                        "properties": {
+                          "nodeId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Owner node ID"
+                          },
+                          "recursive": {
+                            "type": "boolean",
+                            "description": "Include all descendants (default: true)"
+                          },
+                          "includeSelf": {
+                            "type": "boolean",
+                            "description": "Include the owner node itself (default: false)"
+                          }
+                        },
+                        "required": [
+                          "nodeId"
+                        ],
+                        "description": "Find nodes owned by a specific node"
+                      },
+                      "linksTo": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 20,
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Find nodes that link to these IDs"
+                      },
+                      "is": {
+                        "enum": [
+                          "done",
+                          "todo",
+                          "template",
+                          "field",
+                          "published",
+                          "entity",
+                          "calendarNode",
+                          "onDayNode",
+                          "chat",
+                          "search",
+                          "command",
+                          "inLibrary"
+                        ],
+                        "description": "Special node type filter"
+                      },
+                      "has": {
+                        "enum": [
+                          "tag",
+                          "field",
+                          "media",
+                          "audio",
+                          "video",
+                          "image"
+                        ],
+                        "description": "Find nodes that have specific content"
+                      },
+                      "created": {
+                        "type": "object",
+                        "properties": {
+                          "last": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "description": "Number of days"
+                          }
+                        },
+                        "required": [
+                          "last"
+                        ],
+                        "description": "Find nodes created within N days"
+                      },
+                      "edited": {
+                        "type": "object",
+                        "properties": {
+                          "by": {
+                            "type": "string",
+                            "format": "email",
+                            "description": "User email to filter by"
+                          },
+                          "last": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "description": "Number of days"
+                          },
+                          "since": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "description": "Milliseconds timestamp"
+                          }
+                        },
+                        "description": "Find nodes edited within time range"
+                      },
+                      "done": {
+                        "type": "object",
+                        "properties": {
+                          "last": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "description": "Number of days"
+                          }
+                        },
+                        "required": [
+                          "last"
+                        ],
+                        "description": "Find nodes marked done within N days"
+                      },
+                      "onDate": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "description": "ISO date string (YYYY-MM-DD)"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "date": {
+                                "type": "string",
+                                "description": "ISO date string"
+                              },
+                              "fieldId": {
+                                "type": "string",
+                                "description": "Specific field to check"
+                              },
+                              "overlaps": {
+                                "type": "boolean",
+                                "description": "Check if date ranges overlap"
+                              }
+                            },
+                            "required": [
+                              "date"
+                            ]
+                          }
+                        ],
+                        "description": "Find nodes with matching dates"
+                      },
+                      "inWorkspace": {
+                        "type": "string",
+                        "description": "Limit to specific workspace ID"
+                      },
+                      "overdue": {
+                        "const": true,
+                        "description": "Find tasks with due dates in the past"
+                      },
+                      "inLibrary": {
+                        "const": true,
+                        "description": "Find nodes in the library/stash"
+                      }
+                    }
+                  },
+                  "description": "At least one condition must match"
+                },
+                "not": {
+                  "type": "object",
+                  "properties": {
+                    "and": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 20,
+                      "items": {},
+                      "description": "All conditions must match"
+                    },
+                    "or": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 20,
+                      "items": {},
+                      "description": "At least one condition must match"
+                    },
+                    "not": {
+                      "description": "Condition must NOT match"
+                    },
+                    "hasType": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "description": "Type ID to search for"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "typeId": {
+                              "type": "string",
+                              "description": "Type ID to search for"
+                            },
+                            "includeExtensions": {
+                              "type": "boolean",
+                              "description": "Include nodes with types that extend this type (default: true)"
+                            }
+                          },
+                          "required": [
+                            "typeId"
+                          ]
+                        }
+                      ],
+                      "description": "Find nodes with a specific type/tag"
+                    },
+                    "field": {
+                      "type": "object",
+                      "properties": {
+                        "fieldId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Field/attribute ID to match"
+                        },
+                        "nodeId": {
+                          "type": "string",
+                          "description": "Match field that references this specific node ID"
+                        },
+                        "stringValue": {
+                          "type": "string",
+                          "description": "Match field with this exact string value (case-insensitive)"
+                        },
+                        "numberValue": {
+                          "type": "number",
+                          "description": "Match field with this exact numeric value"
+                        },
+                        "state": {
+                          "enum": [
+                            "defined",
+                            "undefined",
+                            "set",
+                            "notSet"
+                          ],
+                          "description": "Field presence state: defined/undefined/set/notSet"
+                        }
+                      },
+                      "required": [
+                        "fieldId"
+                      ],
+                      "description": "Match nodes by field values"
+                    },
+                    "compare": {
+                      "type": "object",
+                      "properties": {
+                        "fieldId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Field/attribute ID to compare"
+                        },
+                        "operator": {
+                          "enum": [
+                            "gt",
+                            "lt",
+                            "eq"
+                          ],
+                          "description": "Comparison operator: gt (>), lt (<), eq (=)"
+                        },
+                        "value": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ],
+                          "description": "Value to compare against"
+                        },
+                        "type": {
+                          "enum": [
+                            "number",
+                            "date",
+                            "string"
+                          ],
+                          "description": "Type of comparison"
+                        }
+                      },
+                      "required": [
+                        "fieldId",
+                        "operator",
+                        "value",
+                        "type"
+                      ],
+                      "description": "Compare field values"
+                    },
+                    "textContains": {
+                      "type": "string",
+                      "description": "Case-insensitive substring match in node names"
+                    },
+                    "textMatches": {
+                      "type": "string",
+                      "maxLength": 500,
+                      "description": "Regular expression pattern in /pattern/ or /pattern/i format"
+                    },
+                    "childOf": {
+                      "type": "object",
+                      "properties": {
+                        "nodeIds": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 20,
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Parent node IDs"
+                        },
+                        "recursive": {
+                          "type": "boolean",
+                          "description": "Include all descendants (default: true)"
+                        },
+                        "includeRefs": {
+                          "type": "boolean",
+                          "description": "Include referenced nodes (default: true)"
+                        }
+                      },
+                      "required": [
+                        "nodeIds"
+                      ],
+                      "description": "Find children of specified nodes"
+                    },
+                    "ownedBy": {
+                      "type": "object",
+                      "properties": {
+                        "nodeId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Owner node ID"
+                        },
+                        "recursive": {
+                          "type": "boolean",
+                          "description": "Include all descendants (default: true)"
+                        },
+                        "includeSelf": {
+                          "type": "boolean",
+                          "description": "Include the owner node itself (default: false)"
+                        }
+                      },
+                      "required": [
+                        "nodeId"
+                      ],
+                      "description": "Find nodes owned by a specific node"
+                    },
+                    "linksTo": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 20,
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Find nodes that link to these IDs"
+                    },
+                    "is": {
+                      "enum": [
+                        "done",
+                        "todo",
+                        "template",
+                        "field",
+                        "published",
+                        "entity",
+                        "calendarNode",
+                        "onDayNode",
+                        "chat",
+                        "search",
+                        "command",
+                        "inLibrary"
+                      ],
+                      "description": "Special node type filter"
+                    },
+                    "has": {
+                      "enum": [
+                        "tag",
+                        "field",
+                        "media",
+                        "audio",
+                        "video",
+                        "image"
+                      ],
+                      "description": "Find nodes that have specific content"
+                    },
+                    "created": {
+                      "type": "object",
+                      "properties": {
+                        "last": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "description": "Number of days"
+                        }
+                      },
+                      "required": [
+                        "last"
+                      ],
+                      "description": "Find nodes created within N days"
+                    },
+                    "edited": {
+                      "type": "object",
+                      "properties": {
+                        "by": {
+                          "type": "string",
+                          "format": "email",
+                          "description": "User email to filter by"
+                        },
+                        "last": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "description": "Number of days"
+                        },
+                        "since": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "description": "Milliseconds timestamp"
+                        }
+                      },
+                      "description": "Find nodes edited within time range"
+                    },
+                    "done": {
+                      "type": "object",
+                      "properties": {
+                        "last": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "description": "Number of days"
+                        }
+                      },
+                      "required": [
+                        "last"
+                      ],
+                      "description": "Find nodes marked done within N days"
+                    },
+                    "onDate": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "description": "ISO date string (YYYY-MM-DD)"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "string",
+                              "description": "ISO date string"
+                            },
+                            "fieldId": {
+                              "type": "string",
+                              "description": "Specific field to check"
+                            },
+                            "overlaps": {
+                              "type": "boolean",
+                              "description": "Check if date ranges overlap"
+                            }
+                          },
+                          "required": [
+                            "date"
+                          ]
+                        }
+                      ],
+                      "description": "Find nodes with matching dates"
+                    },
+                    "inWorkspace": {
+                      "type": "string",
+                      "description": "Limit to specific workspace ID"
+                    },
+                    "overdue": {
+                      "const": true,
+                      "description": "Find tasks with due dates in the past"
+                    },
+                    "inLibrary": {
+                      "const": true,
+                      "description": "Find nodes in the library/stash"
+                    }
+                  },
+                  "description": "Condition must NOT match"
+                },
+                "hasType": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "description": "Type ID to search for"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "typeId": {
+                          "type": "string",
+                          "description": "Type ID to search for"
+                        },
+                        "includeExtensions": {
+                          "type": "boolean",
+                          "description": "Include nodes with types that extend this type (default: true)"
+                        }
+                      },
+                      "required": [
+                        "typeId"
+                      ]
+                    }
+                  ],
+                  "description": "Find nodes with a specific type/tag"
+                },
+                "field": {
+                  "type": "object",
+                  "properties": {
+                    "fieldId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Field/attribute ID to match"
+                    },
+                    "nodeId": {
+                      "type": "string",
+                      "description": "Match field that references this specific node ID"
+                    },
+                    "stringValue": {
+                      "type": "string",
+                      "description": "Match field with this exact string value (case-insensitive)"
+                    },
+                    "numberValue": {
+                      "type": "number",
+                      "description": "Match field with this exact numeric value"
+                    },
+                    "state": {
+                      "enum": [
+                        "defined",
+                        "undefined",
+                        "set",
+                        "notSet"
+                      ],
+                      "description": "Field presence state: defined/undefined/set/notSet"
+                    }
+                  },
+                  "required": [
+                    "fieldId"
+                  ],
+                  "description": "Match nodes by field values"
+                },
+                "compare": {
+                  "type": "object",
+                  "properties": {
+                    "fieldId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Field/attribute ID to compare"
+                    },
+                    "operator": {
+                      "enum": [
+                        "gt",
+                        "lt",
+                        "eq"
+                      ],
+                      "description": "Comparison operator: gt (>), lt (<), eq (=)"
+                    },
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "description": "Value to compare against"
+                    },
+                    "type": {
+                      "enum": [
+                        "number",
+                        "date",
+                        "string"
+                      ],
+                      "description": "Type of comparison"
+                    }
+                  },
+                  "required": [
+                    "fieldId",
+                    "operator",
+                    "value",
+                    "type"
+                  ],
+                  "description": "Compare field values"
+                },
+                "textContains": {
+                  "type": "string",
+                  "description": "Case-insensitive substring match in node names"
+                },
+                "textMatches": {
+                  "type": "string",
+                  "maxLength": 500,
+                  "description": "Regular expression pattern in /pattern/ or /pattern/i format"
+                },
+                "childOf": {
+                  "type": "object",
+                  "properties": {
+                    "nodeIds": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 20,
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Parent node IDs"
+                    },
+                    "recursive": {
+                      "type": "boolean",
+                      "description": "Include all descendants (default: true)"
+                    },
+                    "includeRefs": {
+                      "type": "boolean",
+                      "description": "Include referenced nodes (default: true)"
+                    }
+                  },
+                  "required": [
+                    "nodeIds"
+                  ],
+                  "description": "Find children of specified nodes"
+                },
+                "ownedBy": {
+                  "type": "object",
+                  "properties": {
+                    "nodeId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Owner node ID"
+                    },
+                    "recursive": {
+                      "type": "boolean",
+                      "description": "Include all descendants (default: true)"
+                    },
+                    "includeSelf": {
+                      "type": "boolean",
+                      "description": "Include the owner node itself (default: false)"
+                    }
+                  },
+                  "required": [
+                    "nodeId"
+                  ],
+                  "description": "Find nodes owned by a specific node"
+                },
+                "linksTo": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Find nodes that link to these IDs"
+                },
+                "is": {
+                  "enum": [
+                    "done",
+                    "todo",
+                    "template",
+                    "field",
+                    "published",
+                    "entity",
+                    "calendarNode",
+                    "onDayNode",
+                    "chat",
+                    "search",
+                    "command",
+                    "inLibrary"
+                  ],
+                  "description": "Special node type filter"
+                },
+                "has": {
+                  "enum": [
+                    "tag",
+                    "field",
+                    "media",
+                    "audio",
+                    "video",
+                    "image"
+                  ],
+                  "description": "Find nodes that have specific content"
+                },
+                "created": {
+                  "type": "object",
+                  "properties": {
+                    "last": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "Number of days"
+                    }
+                  },
+                  "required": [
+                    "last"
+                  ],
+                  "description": "Find nodes created within N days"
+                },
+                "edited": {
+                  "type": "object",
+                  "properties": {
+                    "by": {
+                      "type": "string",
+                      "format": "email",
+                      "description": "User email to filter by"
+                    },
+                    "last": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "Number of days"
+                    },
+                    "since": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "Milliseconds timestamp"
+                    }
+                  },
+                  "description": "Find nodes edited within time range"
+                },
+                "done": {
+                  "type": "object",
+                  "properties": {
+                    "last": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "Number of days"
+                    }
+                  },
+                  "required": [
+                    "last"
+                  ],
+                  "description": "Find nodes marked done within N days"
+                },
+                "onDate": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "description": "ISO date string (YYYY-MM-DD)"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "date": {
+                          "type": "string",
+                          "description": "ISO date string"
+                        },
+                        "fieldId": {
+                          "type": "string",
+                          "description": "Specific field to check"
+                        },
+                        "overlaps": {
+                          "type": "boolean",
+                          "description": "Check if date ranges overlap"
+                        }
+                      },
+                      "required": [
+                        "date"
+                      ]
+                    }
+                  ],
+                  "description": "Find nodes with matching dates"
+                },
+                "inWorkspace": {
+                  "type": "string",
+                  "description": "Limit to specific workspace ID"
+                },
+                "overdue": {
+                  "const": true,
+                  "description": "Find tasks with due dates in the past"
+                },
+                "inLibrary": {
+                  "const": true,
+                  "description": "Find nodes in the library/stash"
+                }
+              },
+              "description": "Structured search query"
+            },
+            "style": "deepObject",
+            "explode": true,
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "workspaceIds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Workspace IDs to search (defaults to all)"
+            },
+            "style": "deepObject",
+            "explode": true,
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50,
+              "description": "Maximum results to return"
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "breadcrumb": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "tags": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name"
+                          ]
+                        }
+                      },
+                      "tagIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "workspaceId": {
+                        "type": "string"
+                      },
+                      "docType": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "created": {
+                        "type": "string"
+                      },
+                      "inTrash": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "breadcrumb",
+                      "tags",
+                      "tagIds",
+                      "workspaceId",
+                      "docType",
+                      "created",
+                      "inTrash"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{nodeId}": {
+      "get": {
+        "operationId": "nodes.read",
+        "parameters": [
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "maxDepth",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 10,
+              "default": 1
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "markdown": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "Node name (empty string if unnamed)"
+                    },
+                    "description": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Node description (null if none)"
+                    }
+                  },
+                  "required": [
+                    "markdown"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{nodeId}/children": {
+      "get": {
+        "operationId": "nodes.getChildren",
+        "parameters": [
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "default": 0
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "children": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ]
+                            }
+                          },
+                          "tagIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "childCount": {
+                            "type": "number"
+                          },
+                          "docType": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "created": {
+                            "type": "string"
+                          },
+                          "inTrash": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "tags",
+                          "tagIds",
+                          "childCount",
+                          "docType",
+                          "created",
+                          "inTrash"
+                        ]
+                      }
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "children",
+                    "total",
+                    "hasMore"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{nodeId}/tags": {
+      "post": {
+        "operationId": "nodes.updateTags",
+        "parameters": [
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The ID of the node to modify tags on"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "enum": [
+                      "add",
+                      "remove"
+                    ],
+                    "description": "Action to perform: add or remove tags"
+                  },
+                  "tagIds": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Array of tag IDs to add/remove"
+                  }
+                },
+                "required": [
+                  "action",
+                  "tagIds"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "nodeId": {
+                      "type": "string"
+                    },
+                    "nodeName": {
+                      "type": "string"
+                    },
+                    "action": {
+                      "enum": [
+                        "add",
+                        "remove"
+                      ]
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "tagId": {
+                            "type": "string"
+                          },
+                          "tagName": {
+                            "type": "string"
+                          },
+                          "success": {
+                            "type": "boolean"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "tagId",
+                          "tagName",
+                          "success",
+                          "message"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "nodeId",
+                    "nodeName",
+                    "action",
+                    "results"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{nodeId}/fields/{attributeId}/option": {
+      "post": {
+        "operationId": "nodes.setFieldOption",
+        "parameters": [
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The node that the field value will be set on"
+            }
+          },
+          {
+            "name": "attributeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The attribute id for the field"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "optionId": {
+                    "type": "string",
+                    "description": "The node id of the option value to set"
+                  }
+                },
+                "required": [
+                  "optionId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "nodeId": {
+                      "type": "string"
+                    },
+                    "attributeId": {
+                      "type": "string"
+                    },
+                    "optionId": {
+                      "type": "string"
+                    },
+                    "optionName": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "nodeId",
+                    "attributeId",
+                    "optionId",
+                    "optionName",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{nodeId}/fields/{attributeId}/content": {
+      "post": {
+        "operationId": "nodes.setFieldContent",
+        "parameters": [
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The node that the field value will be set on"
+            }
+          },
+          {
+            "name": "attributeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The attribute id for the field"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "description": "The string value to set for the field"
+                  }
+                },
+                "required": [
+                  "content"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "nodeId": {
+                      "type": "string"
+                    },
+                    "attributeId": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "nodeId",
+                    "attributeId",
+                    "content",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{parentNodeId}/import": {
+      "post": {
+        "operationId": "nodes.importTanaPaste",
+        "parameters": [
+          {
+            "name": "parentNodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The ID of the parent node under which the content will be imported"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "description": "Tana Paste formatted content to import"
+                  }
+                },
+                "required": [
+                  "content"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "parentNodeId": {
+                      "type": "string"
+                    },
+                    "targetNodeId": {
+                      "type": "string"
+                    },
+                    "createdNodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ]
+                      }
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "parentNodeId",
+                    "targetNodeId",
+                    "createdNodes",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{nodeId}/trash": {
+      "post": {
+        "operationId": "nodes.trash",
+        "parameters": [
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The ID of the node to move to trash"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "nodeId": {
+                      "type": "string"
+                    },
+                    "nodeName": {
+                      "type": "string"
+                    },
+                    "trashNodeId": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "nodeId",
+                    "nodeName",
+                    "trashNodeId",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{nodeId}/done": {
+      "post": {
+        "operationId": "nodes.setDone",
+        "parameters": [
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The ID of the node to mark done/undone"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "done": {
+                    "type": "boolean",
+                    "description": "true to check/mark done, false to uncheck"
+                  }
+                },
+                "required": [
+                  "done"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "nodeId": {
+                      "type": "string"
+                    },
+                    "nodeName": {
+                      "type": "string"
+                    },
+                    "done": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "nodeId",
+                    "nodeName",
+                    "done",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{nodeId}/update": {
+      "post": {
+        "operationId": "nodes.update",
+        "parameters": [
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The ID of the node to edit"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "New name value (null to clear)"
+                  },
+                  "description": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "New description (null to clear)"
+                  }
+                },
+                "required": []
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "nodeId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Updated name (if provided)"
+                    },
+                    "description": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Updated description (if provided)"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "nodeId",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{workspaceId}/tags": {
+      "get": {
+        "operationId": "tags.list",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "color": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "tags.create",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The workspace ID where the tag will be created"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Name for the new tag"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Description of the tag"
+                  },
+                  "extendsTagIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "default": [],
+                    "description": "Tag IDs to extend from (inheritance)"
+                  },
+                  "showCheckbox": {
+                    "type": "boolean",
+                    "description": "Show a done checkbox on nodes with this tag"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tagId": {
+                      "type": "string"
+                    },
+                    "tagName": {
+                      "type": "string"
+                    },
+                    "extendsTagNames": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "tagId",
+                    "tagName",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tags/{tagId}/schema": {
+      "get": {
+        "operationId": "tags.getSchema",
+        "parameters": [
+          {
+            "name": "tagId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeEditInstructions",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "markdown": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "markdown"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tags/{tagId}/fields": {
+      "post": {
+        "operationId": "tags.addField",
+        "parameters": [
+          {
+            "name": "tagId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The tag ID to add the field to"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Name for the new field"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Description of the field"
+                  },
+                  "dataType": {
+                    "enum": [
+                      "plain",
+                      "number",
+                      "date",
+                      "url",
+                      "email",
+                      "checkbox",
+                      "user",
+                      "instance",
+                      "options"
+                    ],
+                    "description": "Field data type: plain (any content), number, date, url, email, checkbox (boolean), user, instance (reference), options (selection)"
+                  },
+                  "sourceTagId": {
+                    "type": "string",
+                    "description": "Required for instance type - the tag ID that instances reference"
+                  },
+                  "options": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Options for options type fields"
+                  },
+                  "defaultValue": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "description": "Default value for the field"
+                  },
+                  "isMultiValue": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether the field can have multiple values"
+                  }
+                },
+                "required": [
+                  "name",
+                  "dataType"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tagId": {
+                      "type": "string"
+                    },
+                    "tagName": {
+                      "type": "string"
+                    },
+                    "fieldId": {
+                      "type": "string"
+                    },
+                    "fieldName": {
+                      "type": "string"
+                    },
+                    "dataType": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "tagId",
+                    "tagName",
+                    "fieldId",
+                    "fieldName",
+                    "dataType",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tags/{tagId}/checkbox": {
+      "post": {
+        "operationId": "tags.setCheckbox",
+        "parameters": [
+          {
+            "name": "tagId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The tag ID to configure"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "showCheckbox": {
+                    "type": "boolean",
+                    "description": "Whether to show checkbox on nodes with this tag"
+                  },
+                  "doneStateMapping": {
+                    "type": "object",
+                    "properties": {
+                      "fieldId": {
+                        "type": "string",
+                        "description": "The options field ID to map checkbox state to"
+                      },
+                      "checkedValues": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Option IDs that represent \"done\" state"
+                      },
+                      "uncheckedValues": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Option IDs that represent \"not done\" state"
+                      }
+                    },
+                    "required": [
+                      "fieldId",
+                      "checkedValues"
+                    ],
+                    "description": "Optional mapping of checkbox state to field values"
+                  }
+                },
+                "required": [
+                  "showCheckbox"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tagId": {
+                      "type": "string"
+                    },
+                    "tagName": {
+                      "type": "string"
+                    },
+                    "showCheckbox": {
+                      "type": "boolean"
+                    },
+                    "hasDoneStateMapping": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "tagId",
+                    "tagName",
+                    "showCheckbox",
+                    "hasDoneStateMapping",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{workspaceId}/calendar/node": {
+      "get": {
+        "operationId": "calendar.getNodeId",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The workspace ID"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "ISO date (YYYY-MM-DD). Defaults to today."
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "granularity",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "day",
+                "week",
+                "month",
+                "year"
+              ],
+              "description": "Calendar node granularity: day, week, month, or year"
+            },
+            "style": "deepObject",
+            "explode": true,
+            "allowEmptyValue": true,
+            "allowReserved": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "nodeId": {
+                      "type": "string",
+                      "description": "The calendar node ID"
+                    }
+                  },
+                  "required": [
+                    "nodeId"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

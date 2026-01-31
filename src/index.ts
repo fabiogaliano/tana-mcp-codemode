@@ -10,10 +10,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-import { createClient } from "./tana-client";
-import { createTanaAPI } from "./tana-api";
-import { executeSandbox } from "./sandbox";
-import { cleanupOldRuns, initDb } from "./history";
+import { createClient } from "./api/client";
+import { createTanaAPI } from "./api/tana";
+import { executeSandbox } from "./sandbox/executor";
+import { cleanupOldRuns, initDb } from "./storage/history";
 import { TOOL_DESCRIPTION } from "./prompts";
 
 async function main() {

@@ -9,8 +9,9 @@
  * - Automatic history persistence
  */
 
-import type { TanaAPI, SandboxResult } from "./types";
-import { saveScriptRun } from "./history";
+import type { SandboxResult } from "../types";
+import type { TanaAPI } from "../api/tana";
+import { saveScriptRun } from "../storage/history";
 import { createStdinHelper } from "./stdin";
 import { createWorkflowHelper } from "./workflow";
 

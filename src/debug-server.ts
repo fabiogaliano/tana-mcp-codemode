@@ -7,11 +7,11 @@
  * Open: http://localhost:3333
  */
 
-import { createClient } from "./tana-client";
-import { createTanaAPI } from "./tana-api";
-import { executeSandbox } from "./sandbox";
-import { getWorkflowEvents, getRecentWorkflows } from "./workflow";
-import { initDb } from "./history";
+import { createClient } from "./api/client";
+import { createTanaAPI } from "./api/tana";
+import { executeSandbox } from "./sandbox/executor";
+import { getWorkflowEvents, getRecentWorkflows } from "./sandbox/workflow";
+import { initDb } from "./storage/history";
 
 const PORT = parseInt(process.env.DEBUG_PORT || "3333", 10);
 

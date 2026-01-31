@@ -4,12 +4,12 @@
  * Creates the `tana` object that gets injected into the sandbox.
  * Maps high-level operations to Tana Local API HTTP endpoints.
  *
- * Based on Tana Local API OpenAPI spec v1.0.0
+ * Types are generated from the Tana Local API OpenAPI spec.
+ * Run `bun run generate` to regenerate types from api-1.json.
  */
 
-import type { TanaClient } from "./tana-client";
+import type { TanaClient } from "./client";
 import type {
-  TanaAPI,
   Workspace,
   SearchQuery,
   SearchOptions,
@@ -22,6 +22,88 @@ import type {
   SetCheckboxOptions,
   ImportResult,
 } from "./types";
+
+/**
+ * TanaAPI Interface
+ *
+ * The main interface exposed to sandbox code as the `tana` object.
+ * Provides high-level methods organized by domain (workspaces, nodes, tags, etc.)
+ */
+export interface TanaAPI {
+  /** Check API health */
+  health(): Promise<{ status: string; timestamp: string; nodeSpaceReady: boolean }>;
+
+  workspaces: {
+    /** List available workspaces */
+    list(): Promise<Workspace[]>;
+  };
+
+  nodes: {
+    /** Search for nodes */
+    search(query: SearchQuery, options?: SearchOptions): Promise<SearchResult[]>;
+    /** Read a node as markdown */
+    read(nodeId: string, maxDepth?: number): Promise<string>;
+    /** Get children of a node */
+    getChildren(
+      nodeId: string,
+      options?: { limit?: number; offset?: number }
+    ): Promise<Children>;
+    /** Edit a node's name/description */
+    edit(options: EditNodeOptions): Promise<{ success: boolean }>;
+    /** Move node to trash */
+    trash(nodeId: string): Promise<{ success: boolean }>;
+    /** Check a node's checkbox */
+    check(nodeId: string): Promise<{ success: boolean }>;
+    /** Uncheck a node's checkbox */
+    uncheck(nodeId: string): Promise<{ success: boolean }>;
+  };
+
+  tags: {
+    /** List tags in a workspace */
+    list(workspaceId: string, limit?: number): Promise<Tag[]>;
+    /** Get tag schema */
+    getSchema(tagId: string, includeEditInstructions?: boolean): Promise<string>;
+    /** Add/remove tags from a node */
+    modify(
+      nodeId: string,
+      action: "add" | "remove",
+      tagIds: string[]
+    ): Promise<{ success: boolean }>;
+    /** Create a new tag */
+    create(options: CreateTagOptions): Promise<{ tagId: string }>;
+    /** Add a field to a tag */
+    addField(options: AddFieldOptions): Promise<{ fieldId: string }>;
+    /** Configure tag checkbox */
+    setCheckbox(options: SetCheckboxOptions): Promise<{ success: boolean }>;
+  };
+
+  fields: {
+    /** Set a field to an option value */
+    setOption(
+      nodeId: string,
+      attributeId: string,
+      optionId: string
+    ): Promise<{ success: boolean }>;
+    /** Set a field to a string value */
+    setContent(
+      nodeId: string,
+      attributeId: string,
+      content: string
+    ): Promise<{ success: boolean }>;
+  };
+
+  calendar: {
+    /** Get or create a calendar node */
+    getOrCreate(
+      workspaceId: string,
+      granularity: "day" | "week" | "month" | "year",
+      date?: string
+    ): Promise<{ nodeId: string }>;
+  };
+
+  /** Import Tana Paste formatted content */
+  import(parentNodeId: string, content: string): Promise<ImportResult>;
+}
 
 export function createTanaAPI(client: TanaClient): TanaAPI {
   return {
