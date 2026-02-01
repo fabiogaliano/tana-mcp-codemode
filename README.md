@@ -5,7 +5,7 @@ A codemode MCP server for [Tana](https://tana.inc) knowledge management. AI writ
 ## Features
 
 - **Codemode Pattern** — AI writes executable TypeScript, not structured API calls
-- **Full Tana API** — Workspaces, nodes, tags, fields, calendar, import
+- **Tana Local API** — Workspaces, nodes, tags, fields, calendar, import
 - **Top-level Await** — `await tana.workspaces.list()` works directly
 - **Timeout Protection** — 10s max execution prevents infinite loops
 - **Script History** — SQLite persistence for debugging and replay
@@ -46,9 +46,7 @@ bun install
 
 ## MCP Integration
 
-Add to your Claude Desktop config (`claude_desktop_config.json`):
-
-### If installed globally via bun:
+Add to your MCP client's configuration:
 
 ```json
 {
@@ -63,7 +61,13 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
 }
 ```
 
-### If installed from source:
+| Client            | Config Location                                             |
+| ----------------- | ----------------------------------------------------------- |
+| Claude Desktop    | `claude_desktop_config.json`                                |
+| Claude Code       | `.mcp.json` (project) or `~/.claude/settings.json` (global) |
+| Cursor / Windsurf | IDE MCP settings                                            |
+
+**If installed from source**, use `bun` as the command:
 
 ```json
 {
@@ -77,6 +81,161 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
     }
   }
 }
+```
+
+> **Tip**: Add `TANA_HISTORY_PATH` to `env` to customize where the SQLite history database is stored.
+
+## Examples
+
+### Search for nodes
+
+```typescript
+const results = await tana.nodes.search({
+  textContains: "meeting notes"
+});
+console.log("Found:", results.length, "nodes");
+```
+
+### Complex query
+
+```typescript
+const tasks = await tana.nodes.search({
+  and: [
+    { hasType: "taskTagId" },
+    { is: "todo" },
+    { created: { last: 7 } }
+  ]
+});
+console.log({ tasks });
+```
+
+### Import content
+
+```typescript
+await tana.import(parentNodeId, `
+- Project Alpha #[[^projectTagId]]
+  - [[^statusFieldId]]:: Active
+  - [[^dueDateFieldId]]:: [[date:2024-03-15]]
+`);
+```
+
+## Debug UI
+
+A WebSocket-based dashboard for testing scripts:
+
+```bash
+# Start debug server
+bun run src/debug-server.ts
+
+# Open http://localhost:3333
+```
+
+**Routes:**
+- `http://localhost:3333/#debug` — Script execution console
+- `http://localhost:3333/#benchmark` — Codemode vs tana-local performance comparison
+
+**Features:**
+- Real-time script execution
+- Workflow event timeline
+- Error display with suggestions
+- Benchmark results visualization (cost, speed, token usage)
+
+### workflow Helper (Debug UI only)
+
+Track multi-step operations with a timeline view:
+
+```typescript
+workflow.start("Processing nodes");
+workflow.step("Fetching workspaces");
+workflow.progress(5, 100, "Processing");
+workflow.complete("Done!");
+// Or: workflow.abort("Error message");
+```
+
+> **Note**: `workflow` is only available in the Debug UI. It's not exposed in the production MCP prompt.
+
+### Building the React UI (optional)
+
+```bash
+cd ui
+bun install
+bun run build
+cd ..
+bun run src/debug-server.ts
+```
+
+## Architecture
+
+```
+src/
+├── index.ts              # MCP server entry
+├── prompts.ts            # Tool description
+├── types.ts              # TypeScript interfaces
+├── debug-server.ts       # WebSocket debug UI
+├── api/
+│   ├── client.ts         # HTTP client (auth, retry, timeouts)
+│   ├── tana.ts           # API wrapper → `tana` object
+│   └── types.ts          # API type definitions
+├── sandbox/
+│   ├── executor.ts       # Code execution engine
+│   └── workflow.ts       # Progress tracking
+├── storage/
+│   └── history.ts        # SQLite script history
+└── generated/
+    └── api.d.ts          # Generated OpenAPI types
+
+ui/                       # React debug dashboard
+```
+
+### How It Works
+
+1. AI sends TypeScript code to the `execute` tool
+2. `executor.ts` creates an AsyncFunction for top-level await
+3. Code runs with injected `tana` and `console` objects
+4. 10s timeout via Promise.race prevents hangs
+5. `console.log()` output is captured and returned
+6. Script run is saved to SQLite history
+
+## Script History
+
+Runs are persisted to SQLite:
+
+| Platform | Location                                            |
+| -------- | --------------------------------------------------- |
+| macOS    | `~/Library/Application Support/tana-mcp/history.db` |
+| Windows  | `%APPDATA%/tana-mcp/history.db`                     |
+| Linux    | `~/.local/share/tana-mcp/history.db`                |
+
+Old runs (>30 days) are automatically cleaned up on startup.
+
+### What Gets Saved
+
+Each script run records:
+
+| Field               | Description                           |
+| ------------------- | ------------------------------------- |
+| `script`            | The TypeScript code that was executed |
+| `output`            | Captured `console.log()` output       |
+| `error`             | Error message if execution failed     |
+| `api_calls`         | Which Tana API methods were called    |
+| `node_ids_affected` | Node IDs that were read/modified      |
+| `workspace_id`      | Workspace used (if detected)          |
+| `duration_ms`       | Execution time                        |
+
+## Development
+
+```bash
+# Dev mode with watch
+bun run dev
+
+# Type check
+bun run typecheck
+
+# Regenerate API types from OpenAPI spec
+bun run generate
+
+# Run debug server
+bun run debug
 ```
 
 ## API Reference
@@ -138,205 +297,6 @@ await tana.import(parentNodeId, tanaPasteContent)
 
 ```typescript
 await tana.health()  // → { status: "ok" }
-```
-
-## Script Helpers
-
-### stdin() — Input Data
-
-Pass data to scripts via the `input` parameter:
-
-```typescript
-// Parse JSON input
-const data = stdin().json<{ ids: string[] }>();
-
-// Split into lines
-const lines = stdin().lines();
-
-// Raw text
-const text = stdin().text();
-
-// Check if input exists
-if (stdin().hasInput()) {
-  // process input
-}
-```
-
-### workflow — Progress Tracking
-
-Track multi-step operations:
-
-```typescript
-workflow.start("Processing nodes");
-workflow.step("Fetching workspaces");
-workflow.progress(5, 100, "Processing");
-workflow.complete("Done!");
-// Or: workflow.abort("Error message");
-```
-
-## Examples
-
-### Search for nodes
-
-```typescript
-const results = await tana.nodes.search({
-  textContains: "meeting notes"
-});
-console.log("Found:", results.length, "nodes");
-```
-
-### Complex query
-
-```typescript
-const tasks = await tana.nodes.search({
-  and: [
-    { hasType: "taskTagId" },
-    { is: "todo" },
-    { created: { last: 7 } }
-  ]
-});
-console.log({ tasks });
-```
-
-### Import content
-
-```typescript
-await tana.import(parentNodeId, `
-- Project Alpha #[[^projectTagId]]
-  - [[^statusFieldId]]:: Active
-  - [[^dueDateFieldId]]:: [[date:2024-03-15]]
-`);
-```
-
-### Process input data
-
-```typescript
-const { nodeIds } = stdin().json<{ nodeIds: string[] }>();
-for (const id of nodeIds) {
-  const content = await tana.nodes.read(id);
-  console.log(content);
-}
-```
-
-## Debug UI
-
-A WebSocket-based dashboard for testing scripts:
-
-```bash
-# Start debug server
-bun run src/debug-server.ts
-
-# Open http://localhost:3333
-```
-
-Features:
-- Real-time script execution
-- Workflow event timeline
-- Input data testing
-- Error display with suggestions
-
-### Building the React UI (optional)
-
-```bash
-cd ui
-bun install
-bun run build
-cd ..
-bun run src/debug-server.ts
-```
-
-## Architecture
-
-```
-src/
-├── index.ts              # MCP server entry
-├── prompts.ts            # Tool description
-├── types.ts              # TypeScript interfaces
-├── debug-server.ts       # WebSocket debug UI
-├── api/
-│   ├── client.ts         # HTTP client (auth, retry, timeouts)
-│   ├── tana.ts           # API wrapper → `tana` object
-│   └── types.ts          # API type definitions
-├── sandbox/
-│   ├── executor.ts       # Code execution engine
-│   ├── stdin.ts          # Input data helper
-│   └── workflow.ts       # Progress tracking
-├── storage/
-│   └── history.ts        # SQLite script history
-└── generated/
-    └── api.d.ts          # Generated OpenAPI types
-
-ui/                       # React debug dashboard
-```
-
-### How It Works
-
-1. AI sends TypeScript code to the `execute` tool
-2. `sandbox.ts` creates an AsyncFunction for top-level await
-3. Code runs with injected `tana`, `console`, `stdin`, `workflow` objects
-4. 10s timeout via Promise.race prevents hangs
-5. `console.log()` output is captured and returned
-6. Script run is saved to SQLite history
-
-## Script History
-
-Runs are persisted to SQLite:
-
-| Platform | Location                                            |
-| -------- | --------------------------------------------------- |
-| macOS    | `~/Library/Application Support/tana-mcp/history.db` |
-| Windows  | `%APPDATA%/tana-mcp/history.db`                     |
-| Linux    | `~/.local/share/tana-mcp/history.db`                |
-
-Old runs (>30 days) are automatically cleaned up on startup.
-
-### Custom History Location
-
-Set `TANA_HISTORY_PATH` to use a custom database path:
-
-```json
-{
-  "mcpServers": {
-    "tana": {
-      "command": "tana-mcp-codemode",
-      "env": {
-        "TANA_API_TOKEN": "your_token_here",
-        "TANA_HISTORY_PATH": "/path/to/custom/tana-history.db"
-      }
-    }
-  }
-}
-```
-
-### What Gets Saved
-
-Each script run records:
-
-| Field | Description |
-|-------|-------------|
-| `script` | The TypeScript code that was executed |
-| `input` | Data passed via `stdin()` helper |
-| `output` | Captured `console.log()` output |
-| `error` | Error message if execution failed |
-| `api_calls` | Which Tana API methods were called |
-| `node_ids_affected` | Node IDs that were read/modified |
-| `workspace_id` | Workspace used (if detected) |
-| `duration_ms` | Execution time |
-
-## Development
-
-```bash
-# Dev mode with watch
-bun run dev
-
-# Type check
-bun run typecheck
-
-# Regenerate API types from OpenAPI spec
-bun run generate
-
-# Run debug server
-bun run debug
 ```
 
 ## License

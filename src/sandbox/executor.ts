@@ -12,7 +12,6 @@
 import type { SandboxResult } from "../types";
 import type { TanaAPI } from "../api/tana";
 import { saveScriptRun } from "../storage/history";
-import { createStdinHelper } from "./stdin";
 import { createWorkflowHelper } from "./workflow";
 
 const EXECUTION_TIMEOUT = 10_000; // 10 seconds
@@ -122,8 +121,7 @@ function createTrackedTanaAPI(
 export async function executeSandbox(
   code: string,
   tana: TanaAPI,
-  sessionId?: string,
-  input?: string
+  sessionId?: string
 ): Promise<SandboxResult> {
   const startTime = performance.now();
   const logs: string[] = [];
@@ -151,8 +149,6 @@ export async function executeSandbox(
     },
   };
 
-  // Create helpers for script execution
-  const stdin = createStdinHelper(input);
   const effectiveSessionId = sessionId ?? crypto.randomUUID();
   const workflow = createWorkflowHelper(effectiveSessionId);
 
@@ -160,7 +156,6 @@ export async function executeSandbox(
   const trackedTana = createTrackedTanaAPI(tana, tracker);
 
   try {
-    // Create async function to support top-level await
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const AsyncFunction = Object.getPrototypeOf(
       async function () {}
@@ -186,23 +181,20 @@ export async function executeSandbox(
     const fn = new AsyncFunction(
       "tana",
       "console",
-      "stdin",
       "workflow",
       ...shadowedGlobals,
       code
     );
 
-    // Race between execution and timeout
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => {
         reject(new Error(`Execution timed out after ${EXECUTION_TIMEOUT}ms`));
       }, EXECUTION_TIMEOUT);
     });
 
-    // Pass undefined for all shadowed globals
     const undefinedArgs = shadowedGlobals.map(() => undefined);
     await Promise.race([
-      fn(trackedTana, sandboxConsole, stdin, workflow, ...undefinedArgs),
+      fn(trackedTana, sandboxConsole, workflow, ...undefinedArgs),
       timeoutPromise,
     ]);
 
@@ -217,7 +209,6 @@ export async function executeSandbox(
       error: null,
       durationMs,
       sessionId: effectiveSessionId,
-      input: input ?? null,
       apiCalls: tracker.calls.length > 0 ? tracker.calls : null,
       nodeIdsAffected: tracker.nodeIds.size > 0 ? Array.from(tracker.nodeIds) : null,
       workspaceId: tracker.workspaceId,
@@ -242,7 +233,6 @@ export async function executeSandbox(
       error: errorMessage,
       durationMs,
       sessionId: effectiveSessionId,
-      input: input ?? null,
       apiCalls: tracker.calls.length > 0 ? tracker.calls : null,
       nodeIdsAffected: tracker.nodeIds.size > 0 ? Array.from(tracker.nodeIds) : null,
       workspaceId: tracker.workspaceId,

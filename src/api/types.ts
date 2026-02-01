@@ -8,10 +8,6 @@
  */
 import type { operations } from "../generated/api";
 
-// ============================================================================
-// Response Types (extracted from operation responses)
-// ============================================================================
-
 /** Health check response */
 export type HealthResponse =
   operations["health.ping"]["responses"]["200"]["content"]["application/json"];
@@ -87,10 +83,6 @@ export type SetFieldOptionResponse =
 export type SetFieldContentResponse =
   operations["nodes.setFieldContent"]["responses"]["200"]["content"]["application/json"];
 
-// ============================================================================
-// Request/Query Types (extracted from operation parameters)
-// ============================================================================
-
 /** Search query structure */
 export type SearchQuery = NonNullable<
   operations["nodes.search"]["parameters"]["query"]
@@ -105,10 +97,6 @@ export type CalendarGranularity = NonNullable<
 export type FieldDataType = NonNullable<
   operations["tags.addField"]["requestBody"]
 >["content"]["application/json"]["dataType"];
-
-// ============================================================================
-// Request Body Types
-// ============================================================================
 
 /** Create tag request body */
 export type CreateTagBody = NonNullable<
@@ -134,10 +122,6 @@ export type UpdateTagsBody = NonNullable<
 export type NodeUpdateBody = NonNullable<
   operations["nodes.update"]["requestBody"]
 >["content"]["application/json"];
-
-// ============================================================================
-// Derived Helper Types (for ergonomic API usage)
-// ============================================================================
 
 /** Options for search */
 export interface SearchOptions {
@@ -198,10 +182,6 @@ export interface ImportResult {
   nodeIds?: string[];
   error?: string;
 }
-
-// ============================================================================
-// Re-export full generated types for escape hatch
-// ============================================================================
 
 export type { operations } from "../generated/api";
 export type { paths } from "../generated/api";

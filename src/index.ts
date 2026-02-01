@@ -17,24 +17,20 @@ import { cleanupOldRuns, initDb } from "./storage/history";
 import { TOOL_DESCRIPTION } from "./prompts";
 
 async function main() {
-  // Initialize database and cleanup old runs
   initDb();
   const cleaned = cleanupOldRuns(30);
   if (cleaned > 0) {
     console.error(`Cleaned up ${cleaned} old script runs`);
   }
 
-  // Create Tana client and API
   const client = createClient();
   const tana = createTanaAPI(client);
 
-  // Create MCP server using the modern McpServer API
   const server = new McpServer({
     name: "tana-mcp-codemode",
     version: "0.1.0",
   });
 
-  // Register the execute tool using registerTool (non-deprecated API)
   server.registerTool(
     "execute",
     {
@@ -45,16 +41,11 @@ async function main() {
           .string()
           .optional()
           .describe("Optional session ID for grouping script runs"),
-        input: z
-          .string()
-          .optional()
-          .describe("Data to pass to script via stdin() helper"),
       },
     },
-    async ({ code, sessionId, input }) => {
-      const result = await executeSandbox(code, tana, sessionId, input);
+    async ({ code, sessionId }) => {
+      const result = await executeSandbox(code, tana, sessionId);
 
-      // Format response
       let responseText = "";
       if (result.output) {
         responseText += result.output;
@@ -77,7 +68,6 @@ async function main() {
     }
   );
 
-  // Start server with stdio transport
   const transport = new StdioServerTransport();
   await server.connect(transport);
 

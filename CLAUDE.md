@@ -36,7 +36,6 @@ src/
 │   └── types.ts          # API type definitions
 ├── sandbox/
 │   ├── executor.ts       # Code execution + timeout
-│   ├── stdin.ts          # Input data helper
 │   └── workflow.ts       # Progress tracking
 ├── storage/
 │   └── history.ts        # SQLite script history

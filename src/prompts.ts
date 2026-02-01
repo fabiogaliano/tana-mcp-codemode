@@ -39,10 +39,6 @@ tana.import(parentNodeId, tanaPasteContent) → { success, nodeIds? }
 inbox: \`\${workspaceId}_CAPTURE_INBOX\`
 library: \`\${workspaceId}_STASH\`
 
-### Helpers
-stdin().json<T>() | .lines() | .text() | .hasInput()
-workflow.start(msg) | .step(msg) | .progress(n, total, msg) | .complete(msg) | .abort(err)
-
 ## Edit (search-and-replace)
 
 tana.nodes.edit({ nodeId, name: { old_string, new_string }, description: { old_string, new_string } })
