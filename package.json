@@ -1,16 +1,45 @@
 {
-  "name": "@tana/mcp-codemode",
+  "name": "tana-mcp-codemode",
   "version": "0.1.0",
-  "description": "MCP server for Tana with codemode execution",
+  "description": "Codemode MCP server for Tana — AI writes TypeScript that executes against Tana Local API",
   "type": "module",
   "main": "src/index.ts",
+  "bin": {
+    "tana-mcp-codemode": "src/index.ts"
+  },
   "scripts": {
     "generate": "bun run scripts/generate.ts",
     "list-endpoints": "bun run scripts/list-endpoints.ts",
     "start": "bun run --env-file=.env src/index.ts",
     "dev": "bun run --env-file=.env --watch src/index.ts",
     "debug": "bun run --env-file=.env src/debug-server.ts",
-    "typecheck": "bunx tsc --noEmit"
+    "typecheck": "bunx tsc --noEmit",
+    "prepublishOnly": "bun run typecheck"
+  },
+  "files": [
+    "src/index.ts",
+    "src/prompts.ts",
+    "src/types.ts",
+    "src/api",
+    "src/sandbox",
+    "src/storage",
+    "src/generated",
+    "README.md"
+  ],
+  "keywords": [
+    "tana",
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "knowledge-management",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fabiogaliano/tana-mcp-codemode"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.3",

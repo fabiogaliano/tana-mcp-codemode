@@ -18,37 +18,59 @@ A codemode MCP server for [Tana](https://tana.inc) knowledge management. AI writ
 - [Tana Desktop](https://tana.inc) with Local API enabled
 - API token from Tana (Settings → API → Generate Token)
 
-## Quick Start
+## Installation
+
+### Option 1: bun (recommended)
 
 ```bash
-# Install dependencies
+# Requires Bun runtime
+bun add -g tana-mcp-codemode
+```
+
+### Option 2: From source
+
+```bash
+git clone https://github.com/fabiogaliano/tana-mcp-codemode
+cd tana-mcp-codemode
 bun install
-
-# Set your Tana API token
-export TANA_API_TOKEN=your_token_here
-
-# Start MCP server
-bun run src/index.ts
 ```
 
 ## Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TANA_API_TOKEN` | (required) | Bearer token from Tana Desktop |
-| `TANA_API_URL` | `http://127.0.0.1:8262` | Tana Local API URL |
-| `TANA_TIMEOUT` | `10000` | Request timeout in ms |
+| Variable            | Default                 | Description                             |
+| ------------------- | ----------------------- | --------------------------------------- |
+| `TANA_API_TOKEN`    | (required)              | Bearer token from Tana Desktop          |
+| `TANA_API_URL`      | `http://127.0.0.1:8262` | Tana Local API URL                      |
+| `TANA_TIMEOUT`      | `10000`                 | Request timeout in ms                   |
+| `TANA_HISTORY_PATH` | (platform default)      | Custom path for SQLite history database |
 
 ## MCP Integration
 
 Add to your Claude Desktop config (`claude_desktop_config.json`):
+
+### If installed globally via bun:
+
+```json
+{
+  "mcpServers": {
+    "tana": {
+      "command": "tana-mcp-codemode",
+      "env": {
+        "TANA_API_TOKEN": "your_token_here"
+      }
+    }
+  }
+}
+```
+
+### If installed from source:
 
 ```json
 {
   "mcpServers": {
     "tana": {
       "command": "bun",
-      "args": ["run", "/path/to/tana-mcp/src/index.ts"],
+      "args": ["run", "/path/to/tana-mcp-codemode/src/index.ts"],
       "env": {
         "TANA_API_TOKEN": "your_token_here"
       }
@@ -227,20 +249,24 @@ bun run src/debug-server.ts
 
 ```
 src/
-├── index.ts         # MCP server entry
-├── tana-client.ts   # HTTP client (auth, retry, timeouts)
-├── tana-api.ts      # API wrapper → `tana` object
-├── sandbox.ts       # Code execution engine
-├── history.ts       # SQLite script history
-├── workflow.ts      # Progress tracking
-├── stdin.ts         # Input data helper
-├── prompts.ts       # Tool description
-├── types.ts         # TypeScript interfaces
-└── debug-server.ts  # WebSocket debug UI
+├── index.ts              # MCP server entry
+├── prompts.ts            # Tool description
+├── types.ts              # TypeScript interfaces
+├── debug-server.ts       # WebSocket debug UI
+├── api/
+│   ├── client.ts         # HTTP client (auth, retry, timeouts)
+│   ├── tana.ts           # API wrapper → `tana` object
+│   └── types.ts          # API type definitions
+├── sandbox/
+│   ├── executor.ts       # Code execution engine
+│   ├── stdin.ts          # Input data helper
+│   └── workflow.ts       # Progress tracking
+├── storage/
+│   └── history.ts        # SQLite script history
+└── generated/
+    └── api.d.ts          # Generated OpenAPI types
 
-ui/                  # React debug dashboard
-├── src/App.tsx
-└── src/lib/ws-client.ts
+ui/                       # React debug dashboard
 ```
 
 ### How It Works
@@ -256,25 +282,61 @@ ui/                  # React debug dashboard
 
 Runs are persisted to SQLite:
 
-| Platform | Location |
-|----------|----------|
-| macOS | `~/Library/Application Support/tana-mcp/history.db` |
-| Windows | `%APPDATA%/tana-mcp/history.db` |
-| Linux | `~/.local/share/tana-mcp/history.db` |
+| Platform | Location                                            |
+| -------- | --------------------------------------------------- |
+| macOS    | `~/Library/Application Support/tana-mcp/history.db` |
+| Windows  | `%APPDATA%/tana-mcp/history.db`                     |
+| Linux    | `~/.local/share/tana-mcp/history.db`                |
 
 Old runs (>30 days) are automatically cleaned up on startup.
+
+### Custom History Location
+
+Set `TANA_HISTORY_PATH` to use a custom database path:
+
+```json
+{
+  "mcpServers": {
+    "tana": {
+      "command": "tana-mcp-codemode",
+      "env": {
+        "TANA_API_TOKEN": "your_token_here",
+        "TANA_HISTORY_PATH": "/path/to/custom/tana-history.db"
+      }
+    }
+  }
+}
+```
+
+### What Gets Saved
+
+Each script run records:
+
+| Field | Description |
+|-------|-------------|
+| `script` | The TypeScript code that was executed |
+| `input` | Data passed via `stdin()` helper |
+| `output` | Captured `console.log()` output |
+| `error` | Error message if execution failed |
+| `api_calls` | Which Tana API methods were called |
+| `node_ids_affected` | Node IDs that were read/modified |
+| `workspace_id` | Workspace used (if detected) |
+| `duration_ms` | Execution time |
 
 ## Development
 
 ```bash
 # Dev mode with watch
-TANA_API_TOKEN=xxx bun run --watch src/index.ts
+bun run dev
 
 # Type check
-bunx tsc --noEmit
+bun run typecheck
+
+# Regenerate API types from OpenAPI spec
+bun run generate
 
 # Run debug server
-bun run src/debug-server.ts
+bun run debug
 ```
 
 ## License

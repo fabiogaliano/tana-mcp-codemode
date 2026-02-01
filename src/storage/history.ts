@@ -4,17 +4,30 @@
  * Persists executed scripts for debugging and replay.
  * Uses bun:sqlite (built-in, no external dependency).
  * Fire-and-forget saves to avoid blocking execution.
+ *
+ * Configure database location via TANA_HISTORY_PATH env var.
  */
 
 import { Database } from "bun:sqlite";
 import { homedir } from "os";
-import { join } from "path";
+import { join, dirname } from "path";
 import { mkdirSync, existsSync } from "fs";
 import type { ScriptRun } from "../types";
 
 let db: Database | null = null;
 
 function getDbPath(): string {
+  // Allow custom path via env var
+  if (process.env.TANA_HISTORY_PATH) {
+    const customPath = process.env.TANA_HISTORY_PATH;
+    const dir = dirname(customPath);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+    return customPath;
+  }
+
+  // Default platform-specific paths
   const platform = process.platform;
   let baseDir: string;
 
@@ -33,6 +46,28 @@ function getDbPath(): string {
   return join(baseDir, "history.db");
 }
 
+function migrateDb(database: Database): void {
+  // Get existing columns
+  const columns = database
+    .prepare("PRAGMA table_info(script_runs)")
+    .all() as { name: string }[];
+  const columnNames = new Set(columns.map((c) => c.name));
+
+  // Add missing columns (SQLite doesn't support multiple ADD COLUMN in one statement)
+  const newColumns = [
+    { name: "input", type: "TEXT" },
+    { name: "api_calls", type: "TEXT" },
+    { name: "node_ids_affected", type: "TEXT" },
+    { name: "workspace_id", type: "TEXT" },
+  ];
+
+  for (const col of newColumns) {
+    if (!columnNames.has(col.name)) {
+      database.run(`ALTER TABLE script_runs ADD COLUMN ${col.name} ${col.type}`);
+    }
+  }
+}
+
 export function initDb(): Database {
   if (db) return db;
 
@@ -48,9 +83,16 @@ export function initDb(): Database {
       output TEXT NOT NULL,
       error TEXT,
       duration_ms INTEGER NOT NULL,
-      session_id TEXT
+      session_id TEXT,
+      input TEXT,
+      api_calls TEXT,
+      node_ids_affected TEXT,
+      workspace_id TEXT
     )
   `);
+
+  // Migrate existing databases
+  migrateDb(db);
 
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_script_runs_timestamp
@@ -62,32 +104,50 @@ export function initDb(): Database {
     ON script_runs(session_id)
   `);
 
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_script_runs_workspace
+    ON script_runs(workspace_id)
+  `);
+
   return db;
 }
 
-export function saveScriptRun(
-  script: string,
-  success: boolean,
-  output: string,
-  error: string | null,
-  durationMs: number,
-  sessionId: string | null
-): void {
+export interface SaveScriptRunOptions {
+  script: string;
+  success: boolean;
+  output: string;
+  error: string | null;
+  durationMs: number;
+  sessionId: string | null;
+  input?: string | null;
+  apiCalls?: string[] | null;
+  nodeIdsAffected?: string[] | null;
+  workspaceId?: string | null;
+}
+
+export function saveScriptRun(options: SaveScriptRunOptions): void {
   // Fire-and-forget: don't await, don't block
   try {
     const database = initDb();
     const stmt = database.prepare(`
-      INSERT INTO script_runs (timestamp, script, success, output, error, duration_ms, session_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO script_runs (
+        timestamp, script, success, output, error, duration_ms, session_id,
+        input, api_calls, node_ids_affected, workspace_id
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
       Date.now(),
-      script,
-      success ? 1 : 0,
-      output,
-      error,
-      durationMs,
-      sessionId
+      options.script,
+      options.success ? 1 : 0,
+      options.output,
+      options.error,
+      options.durationMs,
+      options.sessionId,
+      options.input ?? null,
+      options.apiCalls ? JSON.stringify(options.apiCalls) : null,
+      options.nodeIdsAffected ? JSON.stringify(options.nodeIdsAffected) : null,
+      options.workspaceId ?? null
     );
   } catch (e) {
     // Silently ignore history save errors - don't disrupt the main flow
@@ -98,10 +158,18 @@ export function saveScriptRun(
 export function getRecentRuns(limit = 50, sessionId?: string): ScriptRun[] {
   const database = initDb();
 
+  const baseQuery = `
+    SELECT
+      id, timestamp, script, success, output, error,
+      duration_ms as durationMs, session_id as sessionId,
+      input, api_calls as apiCalls, node_ids_affected as nodeIdsAffected,
+      workspace_id as workspaceId
+    FROM script_runs
+  `;
+
   if (sessionId) {
     const stmt = database.prepare(`
-      SELECT id, timestamp, script, success, output, error, duration_ms as durationMs, session_id as sessionId
-      FROM script_runs
+      ${baseQuery}
       WHERE session_id = ?
       ORDER BY timestamp DESC
       LIMIT ?
@@ -110,8 +178,7 @@ export function getRecentRuns(limit = 50, sessionId?: string): ScriptRun[] {
   }
 
   const stmt = database.prepare(`
-    SELECT id, timestamp, script, success, output, error, duration_ms as durationMs, session_id as sessionId
-    FROM script_runs
+    ${baseQuery}
     ORDER BY timestamp DESC
     LIMIT ?
   `);
@@ -127,4 +194,9 @@ export function cleanupOldRuns(daysOld = 30): number {
   `);
   const result = stmt.run(cutoff);
   return result.changes;
+}
+
+/** Get the current database path (for debugging) */
+export function getDbLocation(): string {
+  return getDbPath();
 }

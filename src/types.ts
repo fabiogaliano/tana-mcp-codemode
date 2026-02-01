@@ -25,4 +25,8 @@ export interface ScriptRun {
   error: string | null;
   durationMs: number;
   sessionId: string | null;
+  input: string | null;
+  apiCalls: string | null; // JSON array of method names called
+  nodeIdsAffected: string | null; // JSON array of node IDs
+  workspaceId: string | null;
 }

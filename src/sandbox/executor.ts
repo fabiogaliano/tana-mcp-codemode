@@ -6,7 +6,7 @@
  * - AsyncFunction for top-level await support
  * - 10s timeout via Promise.race
  * - Duration tracking
- * - Automatic history persistence
+ * - Automatic history persistence with API call tracking
  */
 
 import type { SandboxResult } from "../types";
@@ -17,6 +17,108 @@ import { createWorkflowHelper } from "./workflow";
 
 const EXECUTION_TIMEOUT = 10_000; // 10 seconds
 
+/**
+ * Wraps the tana API to track which methods are called
+ */
+function createTrackedTanaAPI(
+  tana: TanaAPI,
+  tracker: { calls: string[]; nodeIds: Set<string>; workspaceId: string | null }
+): TanaAPI {
+  const track = <T>(method: string, fn: () => Promise<T>): Promise<T> => {
+    tracker.calls.push(method);
+    return fn();
+  };
+
+  const trackNodeId = (id: string) => tracker.nodeIds.add(id);
+
+  return {
+    health: () => track("health", () => tana.health()),
+
+    workspaces: {
+      list: () => track("workspaces.list", () => tana.workspaces.list()),
+    },
+
+    nodes: {
+      search: (query, options) => {
+        if (options?.workspaceIds?.[0]) {
+          tracker.workspaceId = options.workspaceIds[0];
+        }
+        return track("nodes.search", () => tana.nodes.search(query, options));
+      },
+      read: (nodeId, maxDepth) => {
+        trackNodeId(nodeId);
+        return track("nodes.read", () => tana.nodes.read(nodeId, maxDepth));
+      },
+      getChildren: (nodeId, options) => {
+        trackNodeId(nodeId);
+        return track("nodes.getChildren", () => tana.nodes.getChildren(nodeId, options));
+      },
+      edit: (options) => {
+        trackNodeId(options.nodeId);
+        return track("nodes.edit", () => tana.nodes.edit(options));
+      },
+      trash: (nodeId) => {
+        trackNodeId(nodeId);
+        return track("nodes.trash", () => tana.nodes.trash(nodeId));
+      },
+      check: (nodeId) => {
+        trackNodeId(nodeId);
+        return track("nodes.check", () => tana.nodes.check(nodeId));
+      },
+      uncheck: (nodeId) => {
+        trackNodeId(nodeId);
+        return track("nodes.uncheck", () => tana.nodes.uncheck(nodeId));
+      },
+    },
+
+    tags: {
+      list: (workspaceId, limit) => {
+        tracker.workspaceId = workspaceId;
+        return track("tags.list", () => tana.tags.list(workspaceId, limit));
+      },
+      getSchema: (tagId, includeEditInstructions) =>
+        track("tags.getSchema", () => tana.tags.getSchema(tagId, includeEditInstructions)),
+      modify: (nodeId, action, tagIds) => {
+        trackNodeId(nodeId);
+        return track("tags.modify", () => tana.tags.modify(nodeId, action, tagIds));
+      },
+      create: (options) => {
+        tracker.workspaceId = options.workspaceId;
+        return track("tags.create", () => tana.tags.create(options));
+      },
+      addField: (options) =>
+        track("tags.addField", () => tana.tags.addField(options)),
+      setCheckbox: (options) =>
+        track("tags.setCheckbox", () => tana.tags.setCheckbox(options)),
+    },
+
+    fields: {
+      setOption: (nodeId, attributeId, optionId) => {
+        trackNodeId(nodeId);
+        return track("fields.setOption", () => tana.fields.setOption(nodeId, attributeId, optionId));
+      },
+      setContent: (nodeId, attributeId, content) => {
+        trackNodeId(nodeId);
+        return track("fields.setContent", () => tana.fields.setContent(nodeId, attributeId, content));
+      },
+    },
+
+    calendar: {
+      getOrCreate: (workspaceId, granularity, date) => {
+        tracker.workspaceId = workspaceId;
+        return track("calendar.getOrCreate", () =>
+          tana.calendar.getOrCreate(workspaceId, granularity, date)
+        );
+      },
+    },
+
+    import: (parentNodeId, content) => {
+      trackNodeId(parentNodeId);
+      return track("import", () => tana.import(parentNodeId, content));
+    },
+  };
+}
+
 export async function executeSandbox(
   code: string,
   tana: TanaAPI,
@@ -25,6 +127,13 @@ export async function executeSandbox(
 ): Promise<SandboxResult> {
   const startTime = performance.now();
   const logs: string[] = [];
+
+  // Track API usage
+  const tracker = {
+    calls: [] as string[],
+    nodeIds: new Set<string>(),
+    workspaceId: null as string | null,
+  };
 
   // Custom console that captures output
   const sandboxConsole = {
@@ -47,6 +156,9 @@ export async function executeSandbox(
   const effectiveSessionId = sessionId ?? crypto.randomUUID();
   const workflow = createWorkflowHelper(effectiveSessionId);
 
+  // Wrap tana to track API calls
+  const trackedTana = createTrackedTanaAPI(tana, tracker);
+
   try {
     // Create async function to support top-level await
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
@@ -54,7 +166,31 @@ export async function executeSandbox(
       async function () {}
     ).constructor;
 
-    const fn = new AsyncFunction("tana", "console", "stdin", "workflow", code);
+    // Globals to shadow (will receive undefined to prevent accidental access)
+    // Note: This is defense-in-depth, not a security sandbox
+    const shadowedGlobals = [
+      "process",
+      "require",
+      "Bun",
+      "Deno",
+      "globalThis",
+      "global",
+      "eval",
+      "Function",
+      "__dirname",
+      "__filename",
+      "module",
+      "exports",
+    ];
+
+    const fn = new AsyncFunction(
+      "tana",
+      "console",
+      "stdin",
+      "workflow",
+      ...shadowedGlobals,
+      code
+    );
 
     // Race between execution and timeout
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -63,13 +199,29 @@ export async function executeSandbox(
       }, EXECUTION_TIMEOUT);
     });
 
-    await Promise.race([fn(tana, sandboxConsole, stdin, workflow), timeoutPromise]);
+    // Pass undefined for all shadowed globals
+    const undefinedArgs = shadowedGlobals.map(() => undefined);
+    await Promise.race([
+      fn(trackedTana, sandboxConsole, stdin, workflow, ...undefinedArgs),
+      timeoutPromise,
+    ]);
 
     const durationMs = Math.round(performance.now() - startTime);
     const output = logs.join("\n");
 
     // Fire-and-forget save to history
-    saveScriptRun(code, true, output, null, durationMs, effectiveSessionId);
+    saveScriptRun({
+      script: code,
+      success: true,
+      output,
+      error: null,
+      durationMs,
+      sessionId: effectiveSessionId,
+      input: input ?? null,
+      apiCalls: tracker.calls.length > 0 ? tracker.calls : null,
+      nodeIdsAffected: tracker.nodeIds.size > 0 ? Array.from(tracker.nodeIds) : null,
+      workspaceId: tracker.workspaceId,
+    });
 
     return {
       success: true,
@@ -83,14 +235,18 @@ export async function executeSandbox(
     const output = logs.join("\n");
 
     // Fire-and-forget save to history
-    saveScriptRun(
-      code,
-      false,
+    saveScriptRun({
+      script: code,
+      success: false,
       output,
-      errorMessage,
+      error: errorMessage,
       durationMs,
-      effectiveSessionId
-    );
+      sessionId: effectiveSessionId,
+      input: input ?? null,
+      apiCalls: tracker.calls.length > 0 ? tracker.calls : null,
+      nodeIdsAffected: tracker.nodeIds.size > 0 ? Array.from(tracker.nodeIds) : null,
+      workspaceId: tracker.workspaceId,
+    });
 
     return {
       success: false,

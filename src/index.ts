@@ -30,7 +30,7 @@ async function main() {
 
   // Create MCP server using the modern McpServer API
   const server = new McpServer({
-    name: "tana-mcp",
+    name: "tana-mcp-codemode",
     version: "0.1.0",
   });
 
