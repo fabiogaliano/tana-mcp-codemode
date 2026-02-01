@@ -54,7 +54,9 @@ Add to your MCP client's configuration:
     "tana": {
       "command": "tana-mcp-codemode",
       "env": {
-        "TANA_API_TOKEN": "your_token_here"
+        "TANA_API_TOKEN": "your_token_here",
+        // Optional: customize where the SQLite history database is stored
+        "TANA_HISTORY_PATH": "/path/to/history.db"
       }
     }
   }
@@ -76,14 +78,14 @@ Add to your MCP client's configuration:
       "command": "bun",
       "args": ["run", "/path/to/tana-mcp-codemode/src/index.ts"],
       "env": {
-        "TANA_API_TOKEN": "your_token_here"
+        "TANA_API_TOKEN": "your_token_here",
+        // Optional: customize where the SQLite history database is stored
+        "TANA_HISTORY_PATH": "/path/to/history.db"
       }
     }
   }
 }
 ```
-
-> **Tip**: Add `TANA_HISTORY_PATH` to `env` to customize where the SQLite history database is stored.
 
 ## Examples
 
