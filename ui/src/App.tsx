@@ -6,6 +6,7 @@ import {
   type ExecutionResult,
   type WorkflowEvent,
 } from "./lib/ws-client";
+import { colors, typography, radius, spacing } from "./design-system";
 
 const DEFAULT_CODE = `// Example: List workspaces
 const workspaces = await tana.workspaces.list();
@@ -18,7 +19,7 @@ export default function App() {
 
   const [code, setCode] = useState(DEFAULT_CODE);
   const [input, setInput] = useState("");
-  const [output, setOutput] = useState("Ready");
+  const [output, setOutput] = useState("Ready to execute...");
   const [isError, setIsError] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [durationMs, setDurationMs] = useState<number | null>(null);
@@ -26,6 +27,7 @@ export default function App() {
   const [workflowEvents, setWorkflowEvents] = useState<WorkflowEvent[]>([]);
 
   const clientRef = useRef<ReturnType<typeof createWSClient> | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleMessage = useCallback((message: WSMessage) => {
     switch (message.type) {
@@ -87,211 +89,354 @@ export default function App() {
       e.preventDefault();
       handleRun();
     }
+
+    if (e.key === "Tab" && !e.shiftKey) {
+      e.preventDefault();
+      const target = e.target as HTMLTextAreaElement;
+      const start = target.selectionStart;
+      const end = target.selectionEnd;
+      const newCode = code.substring(0, start) + "  " + code.substring(end);
+      setCode(newCode);
+      setTimeout(() => {
+        target.selectionStart = target.selectionEnd = start + 2;
+      }, 0);
+    }
   };
 
+  const isConnected = status === "connected" && tanaConnected;
+
   return (
-    <div className="container">
-      <header className="header">
-        <h1>Tana MCP Debug</h1>
-        <StatusBadge
-          status={status}
-          tanaConnected={tanaConnected}
-          clientError={clientError}
-        />
-      </header>
+    <div className="debug-page">
+      <div className="debug-layout">
+        <div className="editor-panel">
+          <div className="panel-header">
+            <h2 className="panel-title">Script</h2>
+            <StatusBadge
+              status={status}
+              tanaConnected={tanaConnected}
+              clientError={clientError}
+            />
+          </div>
 
-      <section className="section">
-        <textarea
-          className="editor"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="// Write your script here"
-          spellCheck={false}
-        />
-      </section>
+          <div className="editor-wrapper">
+            <textarea
+              ref={textareaRef}
+              className="code-editor"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="// Write your TypeScript code here..."
+              spellCheck={false}
+              autoCapitalize="off"
+              autoCorrect="off"
+            />
+            <div className="editor-footer">
+              <span className="hint">Cmd + Enter to run</span>
+            </div>
+          </div>
 
-      <section className="row">
-        <div className="input-group">
-          <label>Input Data (optional)</label>
-          <textarea
-            className="input-textarea"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder='{"nodeIds": ["abc", "def"]}'
-            rows={2}
-          />
-        </div>
-        <div className="input-group" style={{ flex: "0 0 auto" }}>
-          <label>&nbsp;</label>
+          <div className="input-section">
+            <label className="input-label">Input Data (optional)</label>
+            <textarea
+              className="input-editor"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder='{"nodeIds": ["abc", "def"]}'
+              rows={3}
+            />
+          </div>
+
           <button
-            className="btn btn-primary"
+            className={`run-button ${isRunning ? "running" : ""}`}
             onClick={handleRun}
-            disabled={status !== "connected" || isRunning}
+            disabled={!isConnected || isRunning}
           >
-            {isRunning ? "Running..." : "Run"}
+            {isRunning ? "Running..." : "Run Script"}
           </button>
         </div>
-      </section>
 
-      <section className="section">
-        <div className="section-title">Output</div>
-        <pre className={`output ${isError ? "error" : ""}`}>{output}</pre>
-        {(durationMs !== null || sessionId) && (
-          <div className="meta">
-            {durationMs !== null && `Completed in ${durationMs}ms`}
-            {durationMs !== null && sessionId && " | "}
-            {sessionId && `Session: ${sessionId}`}
+        <div className="output-panel">
+          <div className="panel-header">
+            <h2 className="panel-title">Output</h2>
+            {durationMs !== null && (
+              <div className="duration-badge">{durationMs}ms</div>
+            )}
           </div>
-        )}
-      </section>
 
-      {workflowEvents.length > 0 && (
-        <section className="section">
-          <div className="section-title">Workflow Events</div>
-          <div className="workflow">
-            {workflowEvents.map((event) => (
-              <div key={event.id} className={`workflow-event ${event.eventType}`}>
-                <span className="type">{event.eventType}</span>
-                <span className="message">{event.message}</span>
+          <pre className={`output-content ${isError ? "error" : ""}`}>
+            {output}
+          </pre>
+
+          {sessionId && (
+            <div className="session-info">
+              <span className="session-label">Session</span>
+              <code className="session-id">{sessionId}</code>
+            </div>
+          )}
+
+          {workflowEvents.length > 0 && (
+            <div className="workflow-section">
+              <h3 className="workflow-title">Workflow Events</h3>
+              <div className="workflow-list">
+                {workflowEvents.map((event) => (
+                  <div
+                    key={event.id}
+                    className={`workflow-event ${event.eventType}`}
+                  >
+                    <span className="event-type">{event.eventType}</span>
+                    <span className="event-message">{event.message}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </section>
-      )}
+            </div>
+          )}
+        </div>
+      </div>
 
       <style>{`
-        .container {
-          max-width: 1200px;
-          margin: 0 auto;
-          padding: 1rem;
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+        .debug-page {
+          padding: ${spacing.xl};
+          background: ${colors.bg.deep};
+          min-height: calc(100vh - 56px);
+          font-family: ${typography.sans};
         }
-        .header {
+
+        .debug-layout {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: ${spacing.xl};
+          max-width: 1600px;
+          margin: 0 auto;
+        }
+
+        .editor-panel, .output-panel {
+          background: ${colors.bg.elevated};
+          border: 1px solid ${colors.border.default};
+          border-radius: ${radius.lg};
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .panel-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          margin-bottom: 1.5rem;
+          padding: ${spacing.lg};
+          border-bottom: 1px solid ${colors.border.subtle};
+          background: ${colors.bg.base};
         }
-        h1 {
-          font-size: 1.5rem;
-          font-weight: 600;
-          color: var(--text-primary);
+
+        .panel-title {
+          font-size: ${typography.lg};
+          font-weight: ${typography.semibold};
+          color: ${colors.text.primary};
         }
-        .section {
-          margin-bottom: 1.5rem;
-        }
-        .section-title {
-          font-size: 0.875rem;
-          color: var(--text-secondary);
-          margin-bottom: 0.5rem;
-        }
-        .editor {
-          width: 100%;
-          min-height: 200px;
-          padding: 1rem;
-          font-family: "SF Mono", Monaco, Consolas, monospace;
-          font-size: 14px;
-          line-height: 1.5;
-          background: var(--bg-secondary);
-          border: 1px solid var(--border);
-          border-radius: 0.5rem;
-          color: var(--text-primary);
-          resize: vertical;
-        }
-        .editor:focus {
-          outline: none;
-          border-color: var(--accent);
-        }
-        .row {
-          display: flex;
-          gap: 1rem;
-          margin-bottom: 1rem;
-        }
-        .input-group {
+
+        .editor-wrapper {
           flex: 1;
+          display: flex;
+          flex-direction: column;
         }
-        .input-group label {
-          display: block;
-          font-size: 0.875rem;
-          color: var(--text-secondary);
-          margin-bottom: 0.25rem;
-        }
-        .input-textarea {
+
+        .code-editor {
+          flex: 1;
           width: 100%;
-          padding: 0.5rem;
-          font-family: "SF Mono", Monaco, Consolas, monospace;
-          font-size: 14px;
-          background: var(--bg-secondary);
-          border: 1px solid var(--border);
-          border-radius: 0.25rem;
-          color: var(--text-primary);
-          resize: vertical;
-        }
-        .input-textarea:focus {
-          outline: none;
-          border-color: var(--accent);
-        }
-        .btn {
-          padding: 0.5rem 1.5rem;
-          font-size: 0.875rem;
-          font-weight: 500;
-          border-radius: 0.375rem;
-          cursor: pointer;
-          transition: background 0.15s;
-        }
-        .btn-primary {
-          background: var(--accent);
-          color: white;
+          min-height: 280px;
+          padding: ${spacing.lg};
+          font-family: ${typography.mono};
+          font-size: 13px;
+          line-height: 1.6;
+          background: transparent;
           border: none;
+          color: ${colors.text.primary};
+          resize: none;
+          outline: none;
         }
-        .btn-primary:hover {
-          background: var(--accent-hover);
+
+        .code-editor::placeholder {
+          color: ${colors.text.muted};
         }
-        .btn-primary:disabled {
-          background: #1e40af;
+
+        .editor-footer {
+          padding: ${spacing.sm} ${spacing.lg};
+          border-top: 1px solid ${colors.border.subtle};
+          background: ${colors.bg.base};
+        }
+
+        .hint {
+          font-size: ${typography.xs};
+          color: ${colors.text.muted};
+        }
+
+        .input-section {
+          padding: ${spacing.lg};
+          border-top: 1px solid ${colors.border.subtle};
+        }
+
+        .input-label {
+          display: block;
+          font-size: ${typography.xs};
+          font-weight: ${typography.medium};
+          color: ${colors.text.muted};
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          margin-bottom: ${spacing.sm};
+        }
+
+        .input-editor {
+          width: 100%;
+          padding: ${spacing.md};
+          font-family: ${typography.mono};
+          font-size: 13px;
+          line-height: 1.5;
+          background: ${colors.bg.base};
+          border: 1px solid ${colors.border.subtle};
+          border-radius: ${radius.md};
+          color: ${colors.text.primary};
+          resize: vertical;
+          outline: none;
+          transition: border-color 150ms ease;
+        }
+
+        .input-editor:focus {
+          border-color: ${colors.winner.secondary};
+        }
+
+        .run-button {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: ${spacing.sm};
+          margin: ${spacing.lg};
+          padding: ${spacing.md} ${spacing.xl};
+          font-family: ${typography.sans};
+          font-size: ${typography.base};
+          font-weight: ${typography.semibold};
+          color: ${colors.bg.deep};
+          background: ${colors.winner.primary};
+          border: none;
+          border-radius: ${radius.md};
+          cursor: pointer;
+          transition: all 150ms ease;
+        }
+
+        .run-button:hover:not(:disabled) {
+          transform: translateY(-1px);
+          filter: brightness(1.1);
+        }
+
+        .run-button:disabled {
+          opacity: 0.5;
           cursor: not-allowed;
         }
-        .output {
-          background: var(--bg-secondary);
-          border: 1px solid var(--border);
-          border-radius: 0.5rem;
-          padding: 1rem;
-          font-family: "SF Mono", Monaco, Consolas, monospace;
+
+        .run-button.running {
+          background: ${colors.bg.hover};
+          color: ${colors.text.secondary};
+        }
+
+        .output-content {
+          flex: 1;
+          margin: 0;
+          padding: ${spacing.lg};
+          font-family: ${typography.mono};
           font-size: 13px;
+          line-height: 1.6;
+          color: ${colors.text.secondary};
           white-space: pre-wrap;
           word-break: break-word;
-          min-height: 150px;
-          max-height: 400px;
           overflow: auto;
-          margin: 0;
+          min-height: 200px;
         }
-        .output.error {
-          border-color: var(--error);
+
+        .output-content.error {
+          color: ${colors.error};
         }
-        .meta {
-          font-size: 0.75rem;
-          color: var(--text-muted);
-          margin-top: 0.5rem;
+
+        .duration-badge {
+          font-family: ${typography.mono};
+          font-size: ${typography.xs};
+          color: ${colors.winner.primary};
+          background: ${colors.winner.primarySoft};
+          padding: ${spacing.xs} ${spacing.sm};
+          border-radius: ${radius.sm};
         }
-        .workflow {
-          font-size: 0.875rem;
-          color: var(--text-secondary);
-        }
-        .workflow-event {
-          padding: 0.25rem 0;
+
+        .session-info {
           display: flex;
-          gap: 0.5rem;
+          align-items: center;
+          gap: ${spacing.sm};
+          padding: ${spacing.md} ${spacing.lg};
+          border-top: 1px solid ${colors.border.subtle};
+          background: ${colors.bg.base};
         }
-        .workflow-event .type {
-          font-weight: 500;
-          width: 80px;
+
+        .session-label {
+          font-size: ${typography.xs};
+          color: ${colors.text.muted};
+          text-transform: uppercase;
+        }
+
+        .session-id {
+          font-family: ${typography.mono};
+          font-size: ${typography.xs};
+          color: ${colors.text.secondary};
+        }
+
+        .workflow-section {
+          border-top: 1px solid ${colors.border.subtle};
+          padding: ${spacing.lg};
+        }
+
+        .workflow-title {
+          font-size: ${typography.xs};
+          font-weight: ${typography.semibold};
+          color: ${colors.text.muted};
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          margin-bottom: ${spacing.md};
+        }
+
+        .workflow-list {
+          display: flex;
+          flex-direction: column;
+          gap: ${spacing.sm};
+        }
+
+        .workflow-event {
+          display: flex;
+          align-items: center;
+          gap: ${spacing.sm};
+          padding: ${spacing.sm} ${spacing.md};
+          border-radius: ${radius.sm};
+          font-size: ${typography.sm};
+          background: ${colors.bg.base};
+        }
+
+        .event-type {
+          font-weight: ${typography.medium};
+          width: 70px;
           flex-shrink: 0;
         }
-        .workflow-event.start .type { color: var(--accent); }
-        .workflow-event.step .type { color: var(--text-secondary); }
-        .workflow-event.progress .type { color: var(--warning); }
-        .workflow-event.complete .type { color: var(--success); }
-        .workflow-event.abort .type { color: var(--error); }
+
+        .workflow-event.start .event-type { color: ${colors.winner.secondary}; }
+        .workflow-event.step .event-type { color: ${colors.text.secondary}; }
+        .workflow-event.progress .event-type { color: ${colors.winner.secondary}; }
+        .workflow-event.complete .event-type { color: ${colors.winner.primary}; }
+        .workflow-event.abort .event-type { color: ${colors.error}; }
+
+        .event-message {
+          color: ${colors.text.secondary};
+        }
+
+        @media (max-width: 1200px) {
+          .debug-layout {
+            grid-template-columns: 1fr;
+          }
+        }
       `}</style>
     </div>
   );
@@ -313,38 +458,37 @@ function StatusBadge({
       : status === "disconnected"
         ? "Disconnected"
         : tanaConnected
-          ? "Connected to Tana"
-          : clientError
-            ? "Tana not connected"
-            : "Checking...";
+          ? "Connected"
+          : "Tana unavailable";
 
   return (
     <div
       className={`status-badge ${isConnected ? "connected" : "disconnected"}`}
       title={clientError || undefined}
     >
-      <span className="dot" />
+      <span className="status-dot" />
       <span>{label}</span>
       <style>{`
         .status-badge {
           display: inline-flex;
           align-items: center;
-          gap: 0.5rem;
-          padding: 0.25rem 0.75rem;
+          gap: 6px;
+          padding: 4px 10px;
           border-radius: 9999px;
-          font-size: 0.875rem;
+          font-size: 12px;
+          font-weight: 500;
         }
         .status-badge.connected {
-          background: #14532d;
-          color: #4ade80;
+          background: ${colors.winner.primarySoft};
+          color: ${colors.winner.primary};
         }
         .status-badge.disconnected {
-          background: #450a0a;
-          color: #f87171;
+          background: ${colors.errorSoft};
+          color: ${colors.error};
         }
-        .status-badge .dot {
-          width: 8px;
-          height: 8px;
+        .status-dot {
+          width: 6px;
+          height: 6px;
           border-radius: 50%;
           background: currentColor;
         }
