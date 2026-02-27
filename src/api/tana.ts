@@ -30,6 +30,9 @@ import type {
  * Provides high-level methods organized by domain (workspaces, nodes, tags, etc.)
  */
 export interface TanaAPI {
+  /** Pre-resolved default workspace (from MAIN_TANA_WORKSPACE env var), or null */
+  workspace: Workspace | null;
+
   /** Check API health */
   health(): Promise<{ status: string; timestamp: string; nodeSpaceReady: boolean }>;
 
@@ -105,8 +108,10 @@ export interface TanaAPI {
   import(parentNodeId: string, content: string): Promise<ImportResult>;
 }
 
-export function createTanaAPI(client: TanaClient): TanaAPI {
+export function createTanaAPI(client: TanaClient, workspace?: Workspace | null): TanaAPI {
   return {
+    workspace: workspace ?? null,
+
     async health() {
       return client.get<{ status: string; timestamp: string; nodeSpaceReady: boolean }>("/health");
     },

@@ -1,0 +1,7 @@
+{
+  "enabledMcpjsonServers": [
+    "anki",
+    "tana-mcp-f"
+  ],
+  "enableAllProjectMcpServers": true
+}

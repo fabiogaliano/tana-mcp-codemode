@@ -31,6 +31,8 @@ function createTrackedTanaAPI(
   const trackNodeId = (id: string) => tracker.nodeIds.add(id);
 
   return {
+    workspace: tana.workspace,
+
     health: () => track("health", () => tana.health()),
 
     workspaces: {
@@ -130,7 +132,7 @@ export async function executeSandbox(
   const tracker = {
     calls: [] as string[],
     nodeIds: new Set<string>(),
-    workspaceId: null as string | null,
+    workspaceId: tana.workspace?.id ?? null,
   };
 
   // Custom console that captures output

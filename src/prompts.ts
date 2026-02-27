@@ -6,6 +6,7 @@ export const TOOL_DESCRIPTION = `Execute TypeScript code to interact with Tana.
 
 ## APIs
 
+tana.workspace → Workspace | null (pre-resolved default workspace)
 tana.health() → { status }
 tana.workspaces.list() → Workspace[] { id, name, homeNodeId }
 
@@ -57,6 +58,14 @@ Empty old_string matches absent field.
 { onDate: "YYYY-MM-DD" | { date, fieldId?, overlaps? } }
 { overdue: true } | { inLibrary: true }
 { and: [...] } | { or: [...] } | { not: {...} }
+
+## Default Workspace
+
+If MAIN_TANA_WORKSPACE is configured, \`tana.workspace\` contains the resolved workspace.
+Use it to skip the workspaces.list() call:
+\`\`\`
+const wsId = tana.workspace?.id ?? (await tana.workspaces.list())[0].id;
+\`\`\`
 
 ## Examples
 

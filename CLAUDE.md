@@ -64,6 +64,7 @@ src/
 
 | Namespace | Purpose |
 |-----------|---------|
+| `tana.workspace` | Pre-resolved default workspace (from env) or null |
 | `tana.workspaces` | List available workspaces |
 | `tana.nodes` | Search, read, edit, trash, check/uncheck |
 | `tana.tags` | List, schema, create, modify, add fields |
@@ -80,6 +81,7 @@ src/
 | `TANA_API_TOKEN` | (required) | Bearer token from Tana Desktop |
 | `TANA_TIMEOUT` | `10000` | Request timeout (ms) |
 | `TANA_HISTORY_PATH` | (platform default) | Custom SQLite history path |
+| `MAIN_TANA_WORKSPACE` | (none) | Default workspace name or ID, resolved at startup |
 
 ## History Database
 

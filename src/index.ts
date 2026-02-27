@@ -12,9 +12,50 @@ import { z } from "zod";
 
 import { createClient } from "./api/client";
 import { createTanaAPI } from "./api/tana";
+import type { TanaClient } from "./api/client";
+import type { Workspace } from "./api/types";
 import { executeSandbox } from "./sandbox/executor";
 import { cleanupOldRuns, initDb } from "./storage/history";
 import { TOOL_DESCRIPTION } from "./prompts";
+
+/**
+ * Resolves the default workspace from MAIN_TANA_WORKSPACE env var.
+ * Matches by ID first, then case-insensitive name.
+ * Returns null if unset, unmatched, or API unreachable.
+ */
+async function resolveWorkspace(client: TanaClient): Promise<Workspace | null> {
+  const envValue = process.env.MAIN_TANA_WORKSPACE?.trim();
+  if (!envValue) return null;
+
+  let workspaces: Workspace[];
+  try {
+    workspaces = await client.get<Workspace[]>("/workspaces");
+  } catch (err) {
+    console.error(
+      `[workspace] Failed to fetch workspaces: ${err instanceof Error ? err.message : err}`
+    );
+    return null;
+  }
+
+  const byId = workspaces.find((w) => w.id === envValue);
+  if (byId) {
+    console.error(`[workspace] Resolved "${envValue}" → ${byId.name} (${byId.id})`);
+    return byId;
+  }
+
+  const lowerEnv = envValue.toLowerCase();
+  const byName = workspaces.find((w) => w.name.toLowerCase() === lowerEnv);
+  if (byName) {
+    console.error(`[workspace] Resolved "${envValue}" → ${byName.name} (${byName.id})`);
+    return byName;
+  }
+
+  const available = workspaces.map((w) => `${w.name} (${w.id})`).join(", ");
+  console.error(
+    `[workspace] No match for "${envValue}". Available: ${available || "none"}`
+  );
+  return null;
+}
 
 async function main() {
   initDb();
@@ -24,7 +65,8 @@ async function main() {
   }
 
   const client = createClient();
-  const tana = createTanaAPI(client);
+  const workspace = await resolveWorkspace(client);
+  const tana = createTanaAPI(client, workspace);
 
   const server = new McpServer({
     name: "tana-mcp-codemode",
