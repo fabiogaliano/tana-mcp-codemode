@@ -13,6 +13,7 @@
     "start": "bun run --env-file=.env src/index.ts",
     "dev": "bun run --env-file=.env --watch src/index.ts",
     "debug": "bun run --env-file=.env src/debug-server.ts",
+    "test": "bun test",
     "typecheck": "bunx tsc --noEmit",
     "prepublishOnly": "bun run typecheck"
   },

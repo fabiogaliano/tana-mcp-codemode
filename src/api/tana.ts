@@ -22,6 +22,7 @@ import type {
   SetCheckboxOptions,
   ImportResult,
 } from "./types";
+import { format } from "./format";
 
 /**
  * TanaAPI Interface
@@ -106,6 +107,9 @@ export interface TanaAPI {
 
   /** Import Tana Paste formatted content */
   import(parentNodeId: string, content: string): Promise<ImportResult>;
+
+  /** Compact formatter for any API response */
+  format(data: unknown): string;
 }
 
 export function createTanaAPI(client: TanaClient, workspace?: Workspace | null): TanaAPI {
@@ -332,6 +336,10 @@ export function createTanaAPI(client: TanaClient, workspace?: Workspace | null):
       return client.post<ImportResult>(`/nodes/${parentNodeId}/import`, {
         content,
       });
+    },
+
+    format(data: unknown): string {
+      return format(data);
     },
   };
 }

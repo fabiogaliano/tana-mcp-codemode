@@ -36,6 +36,9 @@ tana.calendar.getOrCreate(workspaceId, "day"|"week"|"month"|"year", date?)
 ### Import
 tana.import(parentNodeId, tanaPasteContent) → { success, nodeIds? }
 
+### Formatting
+tana.format(data) → string (compact display of any API response)
+
 ### Entry Points
 inbox: \`\${workspaceId}_CAPTURE_INBOX\`
 library: \`\${workspaceId}_STASH\`
@@ -61,11 +64,27 @@ Empty old_string matches absent field.
 
 ## Default Workspace
 
-If MAIN_TANA_WORKSPACE is configured, \`tana.workspace\` contains the resolved workspace.
-Use it to skip the workspaces.list() call:
+tana.workspace is pre-resolved if MAIN_TANA_WORKSPACE is configured.
+Always prefer it over workspaces.list():
 \`\`\`
-const wsId = tana.workspace?.id ?? (await tana.workspaces.list())[0].id;
+const ws = tana.workspace;
+if (ws) { /* use ws.id, ws.name */ } else { const [ws] = await tana.workspaces.list(); }
 \`\`\`
+
+## Output
+
+console.log() output becomes LLM context. Keep it compact:
+- Use tana.format(data) for any API response, or .map() for task-specific fields
+- Batch work in one execute call — a script with a loop beats multiple calls
+- Never JSON.stringify API responses
+
+## API Notes
+
+- search: max 100 results, no pagination. Narrow the query to get different results.
+- getChildren: supports limit + offset for pagination.
+- 10s timeout per execute call. If something times out:
+  - tags.list? → try search({ hasType: "SYS_T01" }) instead
+  - node read? → reduce maxDepth or use getChildren
 
 ## Examples
 
@@ -80,7 +99,4 @@ await tana.import(parentNodeId, \`
 \`)
 \`\`\`
 
-## Output
-
-console.log() to return data.
 `;

@@ -117,6 +117,8 @@ function createTrackedTanaAPI(
       trackNodeId(parentNodeId);
       return track("import", () => tana.import(parentNodeId, content));
     },
+
+    format: (data) => tana.format(data),
   };
 }
 
