@@ -63,8 +63,8 @@ export interface TanaAPI {
   };
 
   tags: {
-    /** List tags in a workspace */
-    list(workspaceId: string, limit?: number): Promise<Tag[]>;
+    /** List all tags in a workspace */
+    listAll(workspaceId: string): Promise<Tag[]>;
     /** Get tag schema */
     getSchema(tagId: string, includeEditInstructions?: boolean, includeInheritedFields?: boolean): Promise<string>;
     /** Add/remove tags from a node */
@@ -228,10 +228,25 @@ export function createTanaAPI(
     },
 
     tags: {
-      async list(workspaceId: string, limit = 50): Promise<Tag[]> {
-        return client.get<Tag[]>(
-          `/workspaces/${workspaceId}/tags?limit=${limit}`
-        );
+      async listAll(workspaceId: string): Promise<Tag[]> {
+        const schemaNodeId = `${workspaceId}_SCHEMA`;
+        const tags: Tag[] = [];
+        let offset = 0;
+
+        while (true) {
+          const page = await client.get<Children>(
+            `/nodes/${schemaNodeId}/children?limit=200&offset=${offset}`
+          );
+          for (const child of page.children) {
+            if (child.docType === "tagDef") {
+              tags.push({ id: child.id, name: child.name });
+            }
+          }
+          if (!page.hasMore) break;
+          offset += 200;
+        }
+
+        return tags;
       },
 
       async getSchema(

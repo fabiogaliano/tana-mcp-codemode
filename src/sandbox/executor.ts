@@ -73,9 +73,9 @@ function createTrackedTanaAPI(
     },
 
     tags: {
-      list: (workspaceId, limit) => {
+      listAll: (workspaceId: string) => {
         tracker.workspaceId = workspaceId;
-        return track("tags.list", () => tana.tags.list(workspaceId, limit));
+        return track("tags.listAll", () => tana.tags.listAll(workspaceId));
       },
       getSchema: (tagId, includeEditInstructions) =>
         track("tags.getSchema", () => tana.tags.getSchema(tagId, includeEditInstructions)),

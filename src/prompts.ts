@@ -7,7 +7,6 @@ export const TOOL_DESCRIPTION = `Execute TypeScript code to interact with Tana.
 ## APIs
 
 tana.workspace → Workspace | null (pre-resolved default workspace)
-tana.health() → { status }
 tana.workspaces.list() → Workspace[] { id, name, homeNodeId }
 
 ### Nodes
@@ -19,8 +18,8 @@ tana.nodes.trash(nodeId) → { success }
 tana.nodes.check(nodeId) / uncheck(nodeId) → { success }
 
 ### Tags
-tana.tags.list(workspaceId, limit?) → Tag[]
-tana.tags.getSchema(tagId, includeEditInstructions?, includeInheritedFields?) → string
+tana.tags.listAll(workspaceId) → Tag[]
+tana.tags.getSchema(tagId) → string
 tana.tags.modify(nodeId, "add"|"remove", tagIds[])
 tana.tags.create({ workspaceId, name, description?, extendsTagIds?, showCheckbox? })
 tana.tags.addField({ tagId, name, dataType: "plain"|"number"|"date"|"url"|"email"|"checkbox"|"user"|"instance"|"options", ... })
@@ -39,9 +38,7 @@ tana.import(parentNodeId, tanaPasteContent) → { success, nodeIds? }
 ### Formatting
 tana.format(data) → string (compact display of any API response)
 
-### Entry Points
-inbox: \`\${workspaceId}_CAPTURE_INBOX\`
-library: \`\${workspaceId}_STASH\`
+Entry points: \`\${workspaceId}_CAPTURE_INBOX\` (inbox), \`\${workspaceId}_STASH\` (library)
 
 ## Edit (search-and-replace)
 
@@ -63,29 +60,25 @@ Empty old_string matches absent field.
 
 ## Default Workspace
 
-tana.workspace is pre-resolved if MAIN_TANA_WORKSPACE is configured.
-Always prefer it over workspaces.list():
-\`\`\`
-const ws = tana.workspace;
-if (ws) { /* use ws.id, ws.name */ } else { const [ws] = await tana.workspaces.list(); }
-\`\`\`
+tana.workspace is pre-resolved if MAIN_TANA_WORKSPACE is set. Prefer over workspaces.list(): \`const ws = tana.workspace ?? (await tana.workspaces.list())[0];\`
 
 ## Output
 
 console.log() output becomes LLM context. Keep it compact:
 - Use tana.format(data) for any API response, or .map() for task-specific fields
-- search returns identity (name, id, tags); use .read() when you need field values
+- search returns metadata only (name, id, tags); use .read() for content
 - Never JSON.stringify API responses
 
 ## API Notes
 
 - search: no offset/pagination — use narrower queries, not repeated calls
-- tags.list: can be slow on large workspaces. Alternative: search({ hasType: "SYS_T01" })
 - getChildren: only endpoint with pagination (limit + offset)
-- Timeout is 10s. If a call times out, try a different approach, not the same call again.
-- childOf/ownedBy/inWorkspace query operators are broken. Use workspaceIds option to scope by workspace: search(query, { workspaceIds: ["id"] })
-- Tag names are not enforced as unique — filter by name to find all matches when needed.
+- Timeout is 10s. On timeout, try a different approach, not the same call.
+- childOf/ownedBy/inWorkspace operators broken. Scope by workspace: search(query, { workspaceIds: ["id"] })
+- Tag names are not unique — use .filter(), not .find(), when searching by name.
+- Find a tag by name: search({ and: [{ hasType: "SYS_T01" }, { textContains: "name" }] })
 - search results: { id, name, breadcrumb[], tags[{id,name}], tagIds[], workspaceId, docType, description, created, inTrash }
+- getSchema output: line 1 is \`# Tag definition: name (id:xxx)\`. Line 2 is \`Extends #parent (id:xxx)\` when tag has inheritance. Parse "Extends" to find relationships.
 
 ## Examples
 

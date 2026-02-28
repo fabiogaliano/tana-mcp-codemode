@@ -308,6 +308,7 @@ v4 is a **quality improvement**, not a cost improvement. n=2 confirms v3/v4 are 
 ### Remaining Code Items
 - [x] **P2-C**: Expose `includeInheritedFields` parameter on getSchema (exists in API, not exposed in tana.ts)
 - [x] **P2-D**: Configurable search workspace scoping (TANA_SEARCH_WORKSPACES env var)
+- [x] **P2-E**: tags.list via Schema node pagination (bypasses 200-tag limit, finds all inheritance)
 - [ ] **P3-A**: Document silent parameter ignoring (API accepts unknown params without error)
 
 ### Eval Infrastructure Improvements
