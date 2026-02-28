@@ -18,8 +18,8 @@ export class TanaAPIError extends Error {
 }
 
 const RETRY_CONFIG = {
-  maxRetries: 3,
-  baseDelayMs: 1000,
+  maxRetries: 2,
+  baseDelayMs: 500,
   retryableCodes: new Set([408, 429, 500, 502, 503, 504]),
 };
 
@@ -230,7 +230,7 @@ export class TanaClient {
 export function createClient(): TanaClient {
   const baseUrl = process.env.TANA_API_URL || "http://127.0.0.1:8262";
   const token = process.env.TANA_API_TOKEN;
-  const timeout = parseInt(process.env.TANA_TIMEOUT || "10000", 10);
+  const timeout = parseInt(process.env.TANA_TIMEOUT || "3000", 10);
 
   if (!token) {
     throw new Error(

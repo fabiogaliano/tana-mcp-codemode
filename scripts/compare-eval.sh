@@ -4,7 +4,7 @@ set -euo pipefail
 
 if [[ $# -lt 2 ]]; then
   echo "Usage: $0 <baseline-dir> <comparison-dir>"
-  echo "Example: $0 ./eval-results/baseline ./eval-results/after-p1"
+  echo "Example: $0 ./eval-results/sonnet/v0_baseline ./eval-results/sonnet/v3_timeout-schema-ts"
   exit 1
 fi
 

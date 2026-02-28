@@ -53,7 +53,6 @@ Empty old_string matches absent field.
 { textContains: string } | { textMatches: "/regex/i" }
 { hasType: tagId } | { field: { fieldId, stringValue?, numberValue?, nodeId?, state? } }
 { compare: { fieldId, operator: "gt"|"lt"|"eq", value, type } }
-{ childOf: { nodeIds[], recursive?, includeRefs? } } | { ownedBy: { nodeId, recursive?, includeSelf? } }
 { linksTo: nodeIds[] }
 { is: "done"|"todo"|"template"|"entity"|"calendarNode"|"search"|"inLibrary" }
 { has: "tag"|"field"|"media"|"audio"|"video"|"image" }
@@ -75,16 +74,17 @@ if (ws) { /* use ws.id, ws.name */ } else { const [ws] = await tana.workspaces.l
 
 console.log() output becomes LLM context. Keep it compact:
 - Use tana.format(data) for any API response, or .map() for task-specific fields
-- Batch work in one execute call — a script with a loop beats multiple calls
+- search returns identity (name, id, tags); use .read() when you need field values
 - Never JSON.stringify API responses
 
 ## API Notes
 
-- search: max 100 results, no pagination. Narrow the query to get different results.
-- getChildren: supports limit + offset for pagination.
-- 10s timeout per execute call. If something times out:
-  - tags.list? → try search({ hasType: "SYS_T01" }) instead
-  - node read? → reduce maxDepth or use getChildren
+- search: no offset/pagination — use narrower queries, not repeated calls
+- tags.list: can be slow on large workspaces. Alternative: search({ hasType: "SYS_T01" })
+- getChildren: only endpoint with pagination (limit + offset)
+- Timeout is 10s. If a call times out, try a different approach, not the same call again.
+- childOf/ownedBy/inWorkspace query operators are broken. Use workspaceIds option to scope by workspace: search(query, { workspaceIds: ["id"] })
+- Tag names are not enforced as unique — filter by name to find all matches when needed.
 
 ## Examples
 

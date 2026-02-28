@@ -112,7 +112,11 @@ export interface TanaAPI {
   format(data: unknown): string;
 }
 
-export function createTanaAPI(client: TanaClient, workspace?: Workspace | null): TanaAPI {
+export function createTanaAPI(
+  client: TanaClient,
+  workspace?: Workspace | null,
+  defaultSearchWorkspaceIds?: string[]
+): TanaAPI {
   return {
     workspace: workspace ?? null,
 
@@ -156,8 +160,10 @@ export function createTanaAPI(client: TanaClient, workspace?: Workspace | null):
 
         addQueryParams(query as unknown as Record<string, unknown>, "query");
         if (options?.limit) params.push(`limit=${options.limit}`);
-        if (options?.workspaceIds) {
-          options.workspaceIds.forEach((id, i) => {
+        const effectiveWorkspaceIds = options?.workspaceIds
+          ?? (defaultSearchWorkspaceIds?.length ? defaultSearchWorkspaceIds : undefined);
+        if (effectiveWorkspaceIds) {
+          effectiveWorkspaceIds.forEach((id, i) => {
             params.push(`workspaceIds[${i}]=${encodeURIComponent(id)}`);
           });
         }
@@ -235,7 +241,7 @@ export function createTanaAPI(client: TanaClient, workspace?: Workspace | null):
         const result = await client.get<{ markdown: string }>(
           `/tags/${tagId}/schema?includeEditInstructions=${includeEditInstructions}`
         );
-        return result.markdown;
+        return truncateOptionLists(result.markdown);
       },
 
       async modify(
@@ -342,4 +348,40 @@ export function createTanaAPI(client: TanaClient, workspace?: Workspace | null):
       return format(data);
     },
   };
+}
+
+const MAX_OPTIONS_SHOWN = 5;
+const OPTION_LINE_RE = /^  - .+ \(id:/;
+
+function truncateOptionLists(markdown: string): string {
+  const lines = markdown.split("\n");
+  const result: string[] = [];
+  let optionCount = 0;
+  let inOptions = false;
+
+  for (const line of lines) {
+    if (OPTION_LINE_RE.test(line)) {
+      if (!inOptions) {
+        inOptions = true;
+        optionCount = 0;
+      }
+      optionCount++;
+      if (optionCount <= MAX_OPTIONS_SHOWN) {
+        result.push(line);
+      }
+    } else {
+      if (inOptions && optionCount > MAX_OPTIONS_SHOWN) {
+        result.push(`  - ... (${optionCount - MAX_OPTIONS_SHOWN} more, ${optionCount} total)`);
+      }
+      inOptions = false;
+      optionCount = 0;
+      result.push(line);
+    }
+  }
+
+  if (inOptions && optionCount > MAX_OPTIONS_SHOWN) {
+    result.push(`  - ... (${optionCount - MAX_OPTIONS_SHOWN} more, ${optionCount} total)`);
+  }
+
+  return result.join("\n");
 }

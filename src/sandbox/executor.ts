@@ -182,12 +182,15 @@ export async function executeSandbox(
       "exports",
     ];
 
+    const transpiler = new Bun.Transpiler({ loader: "ts" });
+    const jsCode = transpiler.transformSync(code);
+
     const fn = new AsyncFunction(
       "tana",
       "console",
       "workflow",
       ...shadowedGlobals,
-      code
+      jsCode
     );
 
     const timeoutPromise = new Promise<never>((_, reject) => {

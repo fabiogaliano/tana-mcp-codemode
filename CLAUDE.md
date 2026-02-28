@@ -82,6 +82,7 @@ src/
 | `TANA_TIMEOUT` | `10000` | Request timeout (ms) |
 | `TANA_HISTORY_PATH` | (platform default) | Custom SQLite history path |
 | `MAIN_TANA_WORKSPACE` | (none) | Default workspace name or ID, resolved at startup |
+| `TANA_SEARCH_WORKSPACES` | (none) | Comma-separated workspace names or IDs for default search scoping |
 
 ## History Database
 

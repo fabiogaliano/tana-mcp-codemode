@@ -57,6 +57,52 @@ async function resolveWorkspace(client: TanaClient): Promise<Workspace | null> {
   return null;
 }
 
+/**
+ * Resolves TANA_SEARCH_WORKSPACES env var to an array of workspace IDs.
+ * Each value can be an ID or case-insensitive name.
+ * Unresolved values are logged and skipped.
+ */
+async function resolveSearchWorkspaces(client: TanaClient): Promise<string[]> {
+  const envValue = process.env.TANA_SEARCH_WORKSPACES?.trim();
+  if (!envValue) return [];
+
+  const values = envValue.split(",").map((v) => v.trim()).filter(Boolean);
+  if (values.length === 0) return [];
+
+  let workspaces: Workspace[];
+  try {
+    workspaces = await client.get<Workspace[]>("/workspaces");
+  } catch (err) {
+    console.error(
+      `[search-workspaces] Failed to fetch workspaces: ${err instanceof Error ? err.message : err}`
+    );
+    return [];
+  }
+
+  const resolvedIds: string[] = [];
+  for (const value of values) {
+    const byId = workspaces.find((w) => w.id === value);
+    if (byId) {
+      resolvedIds.push(byId.id);
+      console.error(`[search-workspaces] Resolved "${value}" → ${byId.name} (${byId.id})`);
+      continue;
+    }
+    const lowerValue = value.toLowerCase();
+    const byName = workspaces.find((w) => w.name.toLowerCase() === lowerValue);
+    if (byName) {
+      resolvedIds.push(byName.id);
+      console.error(`[search-workspaces] Resolved "${value}" → ${byName.name} (${byName.id})`);
+      continue;
+    }
+    const available = workspaces.map((w) => `${w.name} (${w.id})`).join(", ");
+    console.error(
+      `[search-workspaces] No match for "${value}". Available: ${available || "none"}`
+    );
+  }
+
+  return resolvedIds;
+}
+
 async function main() {
   initDb();
   const cleaned = cleanupOldRuns(30);
@@ -66,7 +112,8 @@ async function main() {
 
   const client = createClient();
   const workspace = await resolveWorkspace(client);
-  const tana = createTanaAPI(client, workspace);
+  const searchWorkspaceIds = await resolveSearchWorkspaces(client);
+  const tana = createTanaAPI(client, workspace, searchWorkspaceIds);
 
   const server = new McpServer({
     name: "tana-mcp-codemode",
