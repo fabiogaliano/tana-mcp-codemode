@@ -18,7 +18,7 @@ tana.nodes.trash(nodeId) → { success }
 tana.nodes.check(nodeId) / uncheck(nodeId) → { success }
 
 ### Tags
-tana.tags.listAll(workspaceId) → Tag[]
+tana.tags.listAll(workspaceId) → Tag[] (workspace supertags only — for schema analysis)
 tana.tags.getSchema(tagId) → string
 tana.tags.modify(nodeId, "add"|"remove", tagIds[])
 tana.tags.create({ workspaceId, name, description?, extendsTagIds?, showCheckbox? })
@@ -66,7 +66,7 @@ tana.workspace is pre-resolved if MAIN_TANA_WORKSPACE is set. Prefer over worksp
 
 console.log() output becomes LLM context. Keep it compact:
 - Use tana.format(data) for any API response, or .map() for task-specific fields
-- search returns metadata only (name, id, tags); use .read() for content
+- search returns metadata only (name, id, tags); use .read() for content and field values
 - Never JSON.stringify API responses
 
 ## API Notes
@@ -75,10 +75,9 @@ console.log() output becomes LLM context. Keep it compact:
 - getChildren: only endpoint with pagination (limit + offset)
 - Timeout is 10s. On timeout, try a different approach, not the same call.
 - childOf/ownedBy/inWorkspace operators broken. Scope by workspace: search(query, { workspaceIds: ["id"] })
-- Tag names are not unique — use .filter(), not .find(), when searching by name.
-- Find a tag by name: search({ and: [{ hasType: "SYS_T01" }, { textContains: "name" }] })
+- Tag names are not unique. Find a tag by name: search({ and: [{ hasType: "SYS_T01" }, { textContains: "name" }] })
 - search results: { id, name, breadcrumb[], tags[{id,name}], tagIds[], workspaceId, docType, description, created, inTrash }
-- getSchema output: line 1 is \`# Tag definition: name (id:xxx)\`. Line 2 is \`Extends #parent (id:xxx)\` when tag has inheritance. Parse "Extends" to find relationships.
+- getSchema output: line 1 is \`# Tag definition: name (id:xxx)\`. Line 2 is \`Extends #parent (id:xxx)\` when tag has inheritance, or \`Extends #parent (base type) (id:xxx)\` for Tana built-in types. Parse "Extends" to find relationships.
 
 ## Examples
 

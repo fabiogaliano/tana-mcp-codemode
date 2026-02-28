@@ -37,12 +37,14 @@ bun install
 
 ## Configuration
 
-| Variable            | Default                 | Description                             |
-| ------------------- | ----------------------- | --------------------------------------- |
-| `TANA_API_TOKEN`    | (required)              | Bearer token from Tana Desktop          |
-| `TANA_API_URL`      | `http://127.0.0.1:8262` | Tana Local API URL                      |
-| `TANA_TIMEOUT`      | `10000`                 | Request timeout in ms                   |
-| `TANA_HISTORY_PATH` | (platform default)      | Custom path for SQLite history database |
+| Variable                | Default                 | Description                                                    |
+| ----------------------- | ----------------------- | -------------------------------------------------------------- |
+| `TANA_API_TOKEN`        | (required)              | Bearer token from Tana Desktop                                 |
+| `TANA_API_URL`          | `http://127.0.0.1:8262` | Tana Local API URL                                             |
+| `TANA_TIMEOUT`          | `10000`                 | Request timeout in ms                                          |
+| `TANA_HISTORY_PATH`     | (platform default)      | Custom path for SQLite history database                        |
+| `MAIN_TANA_WORKSPACE`   | (none)                  | Default workspace name or ID, resolved at startup              |
+| `TANA_SEARCH_WORKSPACES`| (none)                  | Comma-separated workspace names or IDs for default search scoping |
 
 ## MCP Integration
 
@@ -55,6 +57,9 @@ Add to your MCP client's configuration:
       "command": "tana-mcp-codemode",
       "env": {
         "TANA_API_TOKEN": "your_token_here",
+        // Optional
+        "MAIN_TANA_WORKSPACE": "My Workspace",
+        "TANA_SEARCH_WORKSPACES": "My Workspace",
         // Optional: customize where the SQLite history database is stored
         "TANA_HISTORY_PATH": "/path/to/history.db"
       }
@@ -79,6 +84,9 @@ Add to your MCP client's configuration:
       "args": ["run", "/path/to/tana-mcp-codemode/src/index.ts"],
       "env": {
         "TANA_API_TOKEN": "your_token_here",
+        // Optional
+        "MAIN_TANA_WORKSPACE": "My Workspace",
+        "TANA_SEARCH_WORKSPACES": "My Workspace",
         // Optional: customize where the SQLite history database is stored
         "TANA_HISTORY_PATH": "/path/to/history.db"
       }
@@ -266,9 +274,9 @@ await tana.nodes.uncheck(nodeId)             // mark undone
 ### Tags (Supertags)
 
 ```typescript
-await tana.tags.list(workspaceId, limit?)
-await tana.tags.getSchema(tagId, includeEditInstructions?)
-await tana.tags.modify(nodeId, action, tagIds)  // action: "add" | "remove"
+await tana.tags.listAll(workspaceId)              // All workspace supertags (paginated)
+await tana.tags.getSchema(tagId, opts?)            // opts: { includeInheritedFields? }
+await tana.tags.modify(nodeId, action, tagIds)     // action: "add" | "remove"
 await tana.tags.create({ workspaceId, name, description?, extendsTagIds?, showCheckbox? })
 await tana.tags.addField({ tagId, name, dataType, ... })
 await tana.tags.setCheckbox({ tagId, showCheckbox, doneStateMapping? })
@@ -298,7 +306,9 @@ await tana.import(parentNodeId, tanaPasteContent)
 ### Utility
 
 ```typescript
-await tana.health()  // → { status: "ok" }
+tana.workspace                // Pre-resolved default workspace (from MAIN_TANA_WORKSPACE) or null
+tana.format(data)             // Compact display of any API response
+await tana.health()           // → { status: "ok" }
 ```
 
 ## License
