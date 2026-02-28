@@ -66,7 +66,7 @@ export interface TanaAPI {
     /** List tags in a workspace */
     list(workspaceId: string, limit?: number): Promise<Tag[]>;
     /** Get tag schema */
-    getSchema(tagId: string, includeEditInstructions?: boolean): Promise<string>;
+    getSchema(tagId: string, includeEditInstructions?: boolean, includeInheritedFields?: boolean): Promise<string>;
     /** Add/remove tags from a node */
     modify(
       nodeId: string,
@@ -236,10 +236,11 @@ export function createTanaAPI(
 
       async getSchema(
         tagId: string,
-        includeEditInstructions = false
+        includeEditInstructions = false,
+        includeInheritedFields = true
       ): Promise<string> {
         const result = await client.get<{ markdown: string }>(
-          `/tags/${tagId}/schema?includeEditInstructions=${includeEditInstructions}`
+          `/tags/${tagId}/schema?includeEditInstructions=${includeEditInstructions}&includeInheritedFields=${includeInheritedFields}`
         );
         return truncateOptionLists(result.markdown);
       },

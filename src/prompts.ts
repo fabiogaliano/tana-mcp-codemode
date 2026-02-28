@@ -20,7 +20,7 @@ tana.nodes.check(nodeId) / uncheck(nodeId) → { success }
 
 ### Tags
 tana.tags.list(workspaceId, limit?) → Tag[]
-tana.tags.getSchema(tagId, includeEditInstructions?) → string
+tana.tags.getSchema(tagId, includeEditInstructions?, includeInheritedFields?) → string
 tana.tags.modify(nodeId, "add"|"remove", tagIds[])
 tana.tags.create({ workspaceId, name, description?, extendsTagIds?, showCheckbox? })
 tana.tags.addField({ tagId, name, dataType: "plain"|"number"|"date"|"url"|"email"|"checkbox"|"user"|"instance"|"options", ... })
@@ -54,7 +54,7 @@ Empty old_string matches absent field.
 { hasType: tagId } | { field: { fieldId, stringValue?, numberValue?, nodeId?, state? } }
 { compare: { fieldId, operator: "gt"|"lt"|"eq", value, type } }
 { linksTo: nodeIds[] }
-{ is: "done"|"todo"|"template"|"entity"|"calendarNode"|"search"|"inLibrary" }
+{ is: "done"|"todo"|"template"|"field"|"published"|"entity"|"calendarNode"|"onDayNode"|"chat"|"search"|"command"|"inLibrary" }
 { has: "tag"|"field"|"media"|"audio"|"video"|"image" }
 { created: { last: N } } | { edited: { last?, by?, since? } } | { done: { last: N } }
 { onDate: "YYYY-MM-DD" | { date, fieldId?, overlaps? } }
@@ -85,6 +85,7 @@ console.log() output becomes LLM context. Keep it compact:
 - Timeout is 10s. If a call times out, try a different approach, not the same call again.
 - childOf/ownedBy/inWorkspace query operators are broken. Use workspaceIds option to scope by workspace: search(query, { workspaceIds: ["id"] })
 - Tag names are not enforced as unique — filter by name to find all matches when needed.
+- search results: { id, name, breadcrumb[], tags[{id,name}], tagIds[], workspaceId, docType, description, created, inTrash }
 
 ## Examples
 

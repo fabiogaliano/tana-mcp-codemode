@@ -6,8 +6,8 @@ Analysis of `tana-mcp-codemode` sessions to identify inefficiency patterns and i
 
 ## Current State
 
-### Prompt: v3_timeout-schema-ts (current)
-Based on v1_format-apinotes prompt (best for Sonnet, also helps Haiku), with added factual notes for discovered API limitations + code fixes.
+### Prompt: v4_factual-p2cd (current)
+Based on v3_timeout-schema-ts + factual prompt notes (SearchResult shape, missing `is` enums) + P2-C (`includeInheritedFields`) + P2-D (search workspace scoping).
 
 Key additions over baseline:
 - `tana.format(data)` API for compact output
@@ -16,6 +16,10 @@ Key additions over baseline:
 - API Notes: no pagination, timeout recovery (proactive style), tags.list alternative
 - Factual: childOf/ownedBy/inWorkspace broken — use `workspaceIds` option instead
 - Removed childOf/ownedBy from Search Query Operators (models shouldn't know they exist)
+- SearchResult shape documentation (eliminates field name guessing)
+- Complete `is` enum (12 values, was 7)
+- `includeInheritedFields` param on getSchema (P2-C)
+- Search workspace scoping via TANA_SEARCH_WORKSPACES (P2-D)
 
 ### Code Fixes Applied
 - **P2-A**: HTTP client timeout 3s (was 10s), 2 retries (was 3), 500ms backoff (was 1s). Retries now fit within 10s sandbox window.
@@ -31,7 +35,8 @@ eval-results/.backup/          <- gitignored
 │   ├── v0_baseline/           <- original prompt, no format()
 │   ├── v1_format-apinotes/    <- format() + proactive API notes
 │   ├── v2_batching/           <- format() + reactive API notes + batching nudge
-│   └── v3_timeout-schema-ts/  <- v1 prompt + factual notes + code fixes (CURRENT)
+│   ├── v3_timeout-schema-ts/  <- v1 prompt + factual notes + code fixes
+│   └── v4_factual-p2cd/      <- v3 + SearchResult shape, is enums, P2-C, P2-D (CURRENT)
 └── haiku/                     <- haiku result JSON copies
 ```
 
@@ -44,12 +49,20 @@ eval-results/
 │   ├── v0_baseline/
 │   ├── v1_format-apinotes/
 │   ├── v2_batching/
-│   └── v3_timeout-schema-ts/
+│   ├── v3_timeout-schema-ts/
+│   ├── v3_timeout-schema-ts_r1/    <- n=2 re-eval
+│   ├── v3_timeout-schema-ts_r2/
+│   ├── v4_factual-p2cd_r1/
+│   └── v4_factual-p2cd_r2/
 └── sonnet/
     ├── v0_baseline/
     ├── v1_format-apinotes/
     ├── v2_batching/
-    └── v3_timeout-schema-ts/
+    ├── v3_timeout-schema-ts/
+    ├── v3_timeout-schema-ts_r1/    <- n=2 re-eval
+    ├── v3_timeout-schema-ts_r2/
+    ├── v4_factual-p2cd_r1/
+    └── v4_factual-p2cd_r2/
 ```
 
 Compare any two: `/opt/homebrew/bin/bash scripts/compare-eval.sh <dir-a> <dir-b>`
@@ -86,6 +99,42 @@ Compare any two: `/opt/homebrew/bin/bash scripts/compare-eval.sh <dir-a> <dir-b>
 | v1_format-apinotes | $1.569 | 14,027 | 29 | -8.4% cost |
 | v2_batching | $1.911 | 18,286 | 32 | +11.6% cost |
 | v3_timeout-schema-ts | **$1.523** | 13,546 | 24 | **-11.0% cost** |
+
+### v3 vs v4 Re-evaluation (n=2)
+
+Ran each variant twice to test reproducibility. 8 scenarios × 2 runs × 2 models = 32 eval runs.
+
+**Haiku (n=2):**
+
+| Version | Run | Cost | Output Tokens | Turns |
+|---------|-----|------|---------------|-------|
+| v3 | r1 | $0.288 | 11,496 | 20 |
+| v3 | r2 | $0.342 | 14,787 | 30 |
+| v3 avg | — | $0.315 | 13,142 | 25 |
+| v4 | r1 | $0.333 | 15,799 | 26 |
+| v4 | r2 | $0.304 | 12,650 | 24 |
+| v4 avg | — | **$0.318** | 14,225 | 25 |
+
+**Sonnet (n=2):**
+
+| Version | Run | Cost | Output Tokens | Turns |
+|---------|-----|------|---------------|-------|
+| v3 | r1 | $1.765 | 14,075 | 32 |
+| v3 | r2 | $1.713 | 17,647 | 29 |
+| v3 avg | — | $1.739 | 15,861 | 30.5 |
+| v4 | r1 | $1.892 | 22,228 | 32 |
+| v4 | r2 | $1.391 | 12,974 | 24 |
+| v4 avg | — | **$1.642** | 17,601 | 28 |
+
+### Variance Analysis
+
+n=1 results were misleading. Key findings:
+
+1. **Original v3 Sonnet ($1.523) was a lucky run** — n=2 average is $1.739 (+14%). The "best result" from n=1 was below the range of either n=2 run ($1.713, $1.765).
+2. **Sonnet v4 has 36% spread** — ranges from $1.391 to $1.892. Individual runs can swing $0.50 in either direction.
+3. **Haiku is more stable** — v3 spread 19% ($0.288–$0.342), v4 spread 10% ($0.304–$0.333).
+4. **e08-tag-explore is the dominant variance driver** — single scenario ranges $0.05 to $0.79 across all runs. This one scenario can swing total cost by $0.74, which is ~45% of Sonnet's average total.
+5. **Cost-neutral conclusion**: v3 and v4 are statistically indistinguishable on cost. Haiku: $0.315 vs $0.318 (+1%). Sonnet: $1.739 vs $1.642 (-6%, within noise).
 
 ### Per-Scenario Patterns
 
@@ -160,7 +209,7 @@ v0 wasted 2+ turns on `childOf` queries that can't work (FM-11 bug). v3 never tr
 The overall pattern: **code fixes remove failure modes that prompt engineering can only partially address**. You can tell the model "search has no pagination" (factual note), but you can't prompt-engineer around a 10s timeout that kills retries before they fire.
 
 ### Methodology
-8 real-world scenarios derived from Session A (discovery) and Session C (search+read). Run via `claude -p --model <model> --output-format json`. n=1 per scenario (statistical limitations noted). Eval script: `scripts/eval-prompts.sh <output-dir> <model>`.
+8 real-world scenarios derived from Session A (discovery) and Session C (search+read). Run via `claude -p --model <model> --output-format json`. v0–v3: n=1 per scenario. v3/v4 re-evaluation: n=2 per scenario (16 runs total per model). Eval scripts: `scripts/eval-prompts.sh <output-dir> <model>`, `scripts/run-eval-comparison.sh`.
 
 ### Qualitative Scoring
 
@@ -196,12 +245,49 @@ Cost metrics alone are misleading — Haiku v2_batching was cheapest but produce
 
 **v2_batching DISQUALIFIED: 2/8 wrong answers (e01, e08). v3 has 0 wrong answers on either model.**
 
-#### Key Findings
+#### Key Findings (v0→v3)
 
 1. **Workspace scoping is the #1 quality driver** — fixes e03/e04 for both models
 2. **v2_batching's cost advantage was from accepting wrong answers faster** — not real efficiency
 3. **Haiku's `.find()` on e06** — always gets 1/4 task tags regardless of variant. Model capability gap, addressable with a prompt note about duplicate names
 4. **v3 is the correct baseline** going forward — best correctness on both models
+
+#### Sonnet: v3→v4 (n=2 verified)
+
+| Scenario | v3 (n=2) | v4 (n=2) | Change |
+|----------|----------|----------|--------|
+| e01-discovery | Correct | Correct | Same |
+| e02-structure | Correct | Correct | Same |
+| e03-search-read | Correct | Correct | Same |
+| e04-topic-search | Correct | Correct | Same |
+| e05-tasks | Correct | Correct | Same |
+| e06-schema | Correct | Correct | Same |
+| e07-create | Correct | Correct | Same |
+| e08-tag-explore | Correct (6-7 turns) | Correct (3-14 turns) | Efficiency varies |
+
+**v4 maintains Sonnet correctness across all scenarios. No regressions.**
+
+#### Haiku: v3→v4 (n=2 verified)
+
+| Scenario | v3 (n=2) | v4 (n=2) | Change |
+|----------|----------|----------|--------|
+| e01-discovery | Correct | Correct | Same |
+| e02-structure | Correct | Correct | Same |
+| e03-search-read | Correct | Correct | Same |
+| e04-topic-search | Correct | Correct | Same |
+| e05-tasks | Partial (vague) | Correct (real data) | Quality ↑ |
+| e06-schema | Partial (1 tag) | Partial (1 tag) | Same |
+| e07-create | Correct | Correct | Same |
+| e08-tag-explore | **WRONG** ("no inheritance") | Correct (found tree) | Quality ↑↑ |
+
+**v4 fixes Haiku's two weakest scenarios. e08 goes from wrong to correct — the SearchResult shape documentation and complete `is` enum give Haiku enough context to find the inheritance tree. e05 improves from vague summaries to real task data.**
+
+#### Key Findings (v3→v4, n=2)
+
+1. **v4 is a quality improvement, not a cost improvement** — cost-neutral on both models
+2. **Haiku benefits most** — 2 scenario quality upgrades (e05, e08) vs 0 for Sonnet
+3. **Factual documentation pays off** — SearchResult shape, complete `is` enum, `includeInheritedFields` all contributed to Haiku's e08 fix
+4. **e06 remains a model capability gap** — Haiku `.find()` still returns 1/4 task tags regardless of prompt version
 
 ---
 
@@ -210,18 +296,26 @@ Cost metrics alone are misleading — Haiku v2_batching was cheapest but produce
 ### ~~Re-eval After Code Fixes~~ ✓ Complete
 Results: Sonnet -11.0% vs v0_baseline (new best). Haiku -12.4% vs v0_baseline (v2_batching remains best at -15.4%).
 
-### Next: v4_batching-timeout-schema-ts (Haiku-Optimal)
-Consider testing v2_batching prompt + v3 code fixes for Haiku. Current v3 uses v1 prompt. The v2 batching instruction helped Haiku (-15.4%) but hurt Sonnet. A model-specific prompt strategy may be optimal.
+### ~~v3 vs v4 Re-evaluation (n=2)~~ ✓ Complete
+v4 is a **quality improvement**, not a cost improvement. n=2 confirms v3/v4 are cost-neutral (Haiku: $0.315 vs $0.318, Sonnet: $1.739 vs $1.642). v4 fixes Haiku e08 (wrong → correct) and e05 (vague → real data). See n=2 results and qualitative scoring above.
+
+### Next Steps
+- **n=3+ still needed** for statistical confidence — n=2 showed original v3 Sonnet ($1.523) was a lucky run (n=2 avg: $1.739, +14%)
+- **e08 variance is the dominant cost driver** — single scenario ranges $0.05–$0.79 across runs. Any aggregate cost claim is fragile until e08 stabilizes.
+- **Haiku e06 is a model capability gap** — `.find()` returns 1/4 task tags regardless of variant. May need explicit prompt note about duplicate tag names.
+- **v4_batching-timeout-schema-ts**: Consider testing v2_batching prompt + v4 code fixes for Haiku. The v2 batching instruction helped Haiku (-15.4%) but hurt Sonnet. A model-specific prompt strategy may be optimal.
 
 ### Remaining Code Items
-- [ ] **P2-C**: Expose `includeInheritedFields` parameter on getSchema (exists in API, not exposed in tana.ts)
+- [x] **P2-C**: Expose `includeInheritedFields` parameter on getSchema (exists in API, not exposed in tana.ts)
 - [x] **P2-D**: Configurable search workspace scoping (TANA_SEARCH_WORKSPACES env var)
 - [ ] **P3-A**: Document silent parameter ignoring (API accepts unknown params without error)
 
 ### Eval Infrastructure Improvements
-- [ ] Run n=3-5 per scenario for statistical confidence
+- [x] Run n=2 per scenario for v3/v4 — see re-evaluation results above
+- [ ] Run n=3-5 per scenario for full statistical confidence
 - [ ] Add FM-3 specific scenario (tag with 250+ options — verify P2-B truncation helps)
 - [x] **Add qualitative scoring** — see Qualitative Scoring section above
+- [x] **Eval comparison script** — `scripts/run-eval-comparison.sh`
 - [ ] Isolate format() contribution (run format code change with baseline prompt)
 
 ---
@@ -312,12 +406,12 @@ Models write `HfCy68zUPM7` instead of `HfCy68zUUPM7` (missing double-U). Nondete
 ### Code
 - [x] **P2-A**: Fix double timeout — client 3s, 2 retries, 500ms backoff
 - [x] **P2-B**: Truncate getSchema options — 5 shown + count summary
-- [ ] **P2-C**: Expose `includeInheritedFields` parameter
+- [x] **P2-C**: Expose `includeInheritedFields` parameter
 - [x] **P2-D**: Configurable search workspace scoping (TANA_SEARCH_WORKSPACES env var)
 
 ### New (discovered during eval)
 - [x] tana.format() helper — `src/api/format.ts`
-- [x] Eval framework — `scripts/eval-prompts.sh` (model-configurable), `scripts/compare-eval.sh`
+- [x] Eval framework — `scripts/eval-prompts.sh` (model-configurable), `scripts/compare-eval.sh`, `scripts/run-eval-comparison.sh`
 - [x] TS sandbox support — Bun.Transpiler (FM-10)
 - [x] childOf/ownedBy/inWorkspace limitation — factual note + operator removal (FM-11)
 - [ ] **P3-A**: Document silent parameter ignoring
