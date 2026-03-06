@@ -58,6 +58,14 @@ function createTrackedTanaAPI(
         trackNodeId(options.nodeId);
         return track("nodes.edit", () => tana.nodes.edit(options));
       },
+      move: (options) => {
+        trackNodeId(options.nodeId);
+        return track("nodes.move", () => tana.nodes.move(options));
+      },
+      open: (nodeId, openType) => {
+        trackNodeId(nodeId);
+        return track("nodes.open", () => tana.nodes.open(nodeId, openType));
+      },
       trash: (nodeId) => {
         trackNodeId(nodeId);
         return track("nodes.trash", () => tana.nodes.trash(nodeId));

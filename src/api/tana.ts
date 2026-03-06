@@ -16,6 +16,7 @@ import type {
   SearchResult,
   Children,
   EditNodeOptions,
+  MoveNodeOptions,
   Tag,
   CreateTagOptions,
   AddFieldOptions,
@@ -54,6 +55,10 @@ export interface TanaAPI {
     ): Promise<Children>;
     /** Edit a node's name/description */
     edit(options: EditNodeOptions): Promise<{ success: boolean }>;
+    /** Move node to a new parent */
+    move(options: MoveNodeOptions): Promise<{ success: boolean }>;
+    /** Open a node in the Tana UI */
+    open(nodeId: string, openType?: "current" | "panel" | "tab"): Promise<{ success: boolean }>;
     /** Move node to trash */
     trash(nodeId: string): Promise<{ success: boolean }>;
     /** Check a node's checkbox */
@@ -86,13 +91,15 @@ export interface TanaAPI {
     setOption(
       nodeId: string,
       attributeId: string,
-      optionId: string
+      optionId: string,
+      mode?: "replace" | "append"
     ): Promise<{ success: boolean }>;
-    /** Set a field to a string value */
+    /** Set a field to a string value, or null to clear it */
     setContent(
       nodeId: string,
       attributeId: string,
-      content: string
+      content: string | null,
+      mode?: "replace" | "append"
     ): Promise<{ success: boolean }>;
   };
 
@@ -198,6 +205,31 @@ export function createTanaAPI(
             name: options.name,
             description: options.description,
           }
+        );
+        return { success: !!result.nodeId };
+      },
+
+      async move(options: MoveNodeOptions): Promise<{ success: boolean }> {
+        const result = await client.post<{ nodeId: string; message: string }>(
+          `/nodes/${options.nodeId}/move`,
+          {
+            targetNodeId: options.targetNodeId,
+            keepSourceReference: options.keepSourceReference,
+            position: options.position,
+            referenceNodeId: options.referenceNodeId,
+            sourceParentId: options.sourceParentId,
+          }
+        );
+        return { success: !!result.nodeId };
+      },
+
+      async open(
+        nodeId: string,
+        openType: "current" | "panel" | "tab" = "current"
+      ): Promise<{ success: boolean }> {
+        const result = await client.post<{ nodeId: string; message: string }>(
+          `/nodes/${nodeId}/open`,
+          { openType }
         );
         return { success: !!result.nodeId };
       },
@@ -317,11 +349,12 @@ export function createTanaAPI(
       async setOption(
         nodeId: string,
         attributeId: string,
-        optionId: string
+        optionId: string,
+        mode?: "replace" | "append"
       ): Promise<{ success: boolean }> {
         const result = await client.post<{ nodeId: string; message: string }>(
           `/nodes/${nodeId}/fields/${attributeId}/option`,
-          { optionId }
+          { optionId, mode }
         );
         return { success: !!result.nodeId };
       },
@@ -329,11 +362,12 @@ export function createTanaAPI(
       async setContent(
         nodeId: string,
         attributeId: string,
-        content: string
+        content: string | null,
+        mode?: "replace" | "append"
       ): Promise<{ success: boolean }> {
         const result = await client.post<{ nodeId: string; message: string }>(
           `/nodes/${nodeId}/fields/${attributeId}/content`,
-          { content }
+          { content, mode }
         );
         return { success: !!result.nodeId };
       },

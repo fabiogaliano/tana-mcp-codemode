@@ -14,6 +14,8 @@ tana.nodes.search(query, options?) → SearchResult[]
 tana.nodes.read(nodeId, maxDepth?) → string (markdown)
 tana.nodes.getChildren(nodeId, { limit?, offset? }) → { children, total, hasMore }
 tana.nodes.edit({ nodeId, name?, description? }) → { success }
+tana.nodes.move({ nodeId, targetNodeId, keepSourceReference?, position?, referenceNodeId?, sourceParentId? }) → { success }
+tana.nodes.open(nodeId, openType?) → { success }  // openType: "current" | "panel" | "tab" (default: "current")
 tana.nodes.trash(nodeId) → { success }
 tana.nodes.check(nodeId) / uncheck(nodeId) → { success }
 
@@ -26,8 +28,8 @@ tana.tags.addField({ tagId, name, dataType: "plain"|"number"|"date"|"url"|"email
 tana.tags.setCheckbox({ tagId, showCheckbox, doneStateMapping? })
 
 ### Fields
-tana.fields.setOption(nodeId, attributeId, optionId)
-tana.fields.setContent(nodeId, attributeId, content)
+tana.fields.setOption(nodeId, attributeId, optionId, mode?)  // mode: "replace" | "append" (default: "replace")
+tana.fields.setContent(nodeId, attributeId, content, mode?)  // content: string | null (null clears field), mode: "replace" | "append"
 
 ### Calendar
 tana.calendar.getOrCreate(workspaceId, "day"|"week"|"month"|"year", date?)

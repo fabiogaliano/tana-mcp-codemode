@@ -161,6 +161,16 @@ export interface SetCheckboxOptions {
   };
 }
 
+/** Options for moving a node to a new parent */
+export interface MoveNodeOptions {
+  nodeId: string;
+  targetNodeId: string;
+  keepSourceReference?: boolean;
+  position?: "start" | "end" | "after" | "before";
+  referenceNodeId?: string;
+  sourceParentId?: string;
+}
+
 /** Options for editing a node */
 export interface EditNodeOptions {
   nodeId: string;
