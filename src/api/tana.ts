@@ -26,6 +26,115 @@ import type {
 import { format } from "./format";
 
 /**
+ * Build deep-object query params (style: deepObject, explode: true).
+ * Used by search and getFieldOptions.
+ */
+function addQueryParams(params: string[], obj: Record<string, unknown>, prefix: string) {
+  for (const [key, value] of Object.entries(obj)) {
+    const paramKey = prefix ? `${prefix}[${key}]` : key;
+    if (value === null || value === undefined) continue;
+    if (typeof value === "object" && !Array.isArray(value)) {
+      addQueryParams(params, value as Record<string, unknown>, paramKey);
+    } else if (Array.isArray(value)) {
+      value.forEach((item, i) => {
+        if (typeof item === "object") {
+          addQueryParams(params, item as Record<string, unknown>, `${paramKey}[${i}]`);
+        } else {
+          params.push(`${encodeURIComponent(`${paramKey}[${i}]`)}=${encodeURIComponent(String(item))}`);
+        }
+      });
+    } else {
+      params.push(`${encodeURIComponent(paramKey)}=${encodeURIComponent(String(value))}`);
+    }
+  }
+}
+
+/** Parse predetermined options: `  - Name <!-- node-id: ABC -->` */
+function parseOptionsFromMarkdown(md: string): { id: string; name: string }[] {
+  const results: { id: string; name: string }[] = [];
+  const lines = md.split("\n");
+  let inOptions = false;
+  for (const line of lines) {
+    if (line.includes("**Options**:")) { inOptions = true; continue; }
+    if (inOptions) {
+      const match = line.match(/^\s+- (.+?)\s*<!--\s*node-id:\s*(\S+)\s*-->/);
+      if (match) {
+        results.push({ id: match[2], name: match[1] });
+      } else if (line.trim() && !line.startsWith("  ")) {
+        break;
+      }
+    }
+  }
+  return results;
+}
+
+/** Parse `[name](tana:id)` references from markdown */
+function parseRefsFromMarkdown(md: string): { id: string; name: string }[] {
+  const results: { id: string; name: string }[] = [];
+  const re = /\[([^\]]+)\]\(tana:([^)]+)\)/g;
+  let match;
+  while ((match = re.exec(md)) !== null) {
+    results.push({ id: match[2], name: match[1] });
+  }
+  return results;
+}
+
+/**
+ * Extract option values for a specific field from node markdown.
+ * Scopes parsing to only the target field's section to avoid noise
+ * from other fields, tags, and node names.
+ */
+function parseFieldValues(md: string, fieldName: string): { id: string; name: string }[] {
+  const results: { id: string; name: string }[] = [];
+  const lines = md.split("\n");
+  let inField = false;
+  let fieldIndent = -1;
+
+  for (const line of lines) {
+    // Detect the field section: "  - **FieldName**:" or "  - **FieldName**: value <!-- node-id: xxx -->"
+    if (!inField && line.includes(`**${fieldName}**`)) {
+      inField = true;
+      fieldIndent = line.search(/\S/);
+
+      // Inline single-value: "  - **Type**: negotiation <!-- node-id: xxx -->"
+      const inlineMatch = line.match(
+        new RegExp(`\\*\\*${fieldName}\\*\\*:\\s*(.+?)\\s*<!--\\s*node-id:\\s*(\\S+)\\s*-->`)
+      );
+      if (inlineMatch) {
+        results.push({ id: inlineMatch[2], name: inlineMatch[1].trim() });
+      }
+      // Also check for tana-link format: "  - **Type**: [value](tana:id)"
+      const linkMatch = line.match(
+        new RegExp(`\\*\\*${fieldName}\\*\\*:\\s*\\[([^\\]]+)\\]\\(tana:([^)]+)\\)`)
+      );
+      if (linkMatch) {
+        results.push({ id: linkMatch[2], name: linkMatch[1] });
+      }
+      continue;
+    }
+
+    if (inField) {
+      const currentIndent = line.search(/\S/);
+      // Left the field's section (same or less indentation)
+      if (line.trim() && currentIndent <= fieldIndent) break;
+
+      // Child value: "    - value <!-- node-id: xxx -->"
+      const childMatch = line.match(/^\s+- (.+?)\s*<!--\s*node-id:\s*(\S+)\s*-->/);
+      if (childMatch) {
+        results.push({ id: childMatch[2], name: childMatch[1].trim() });
+        continue;
+      }
+      // Child value (tana-link): "    - [value](tana:id)"
+      const childLinkMatch = line.match(/^\s+- \[([^\]]+)\]\(tana:([^)]+)\)/);
+      if (childLinkMatch) {
+        results.push({ id: childLinkMatch[2], name: childLinkMatch[1] });
+      }
+    }
+  }
+  return results;
+}
+
+/**
  * TanaAPI Interface
  *
  * The main interface exposed to sandbox code as the `tana` object.
@@ -87,12 +196,11 @@ export interface TanaAPI {
   };
 
   fields: {
-    /** Set a field to an option value */
+    /** Set a field to option value(s). Pass string[] for multi-value fields. */
     setOption(
       nodeId: string,
       attributeId: string,
-      optionId: string,
-      mode?: "replace" | "append"
+      optionId: string | string[]
     ): Promise<{ success: boolean }>;
     /** Set a field to a string value, or null to clear it */
     setContent(
@@ -101,6 +209,11 @@ export interface TanaAPI {
       content: string | null,
       mode?: "replace" | "append"
     ): Promise<{ success: boolean }>;
+    /** Discover available options for an Options-type field */
+    getFieldOptions(
+      fieldId: string,
+      options?: { tagId?: string; workspaceId?: string; limit?: number }
+    ): Promise<{ id: string; name: string }[]>;
   };
 
   calendar: {
@@ -142,30 +255,8 @@ export function createTanaAPI(
         query: SearchQuery,
         options?: SearchOptions
       ): Promise<SearchResult[]> {
-        // Build deep object query params (style: deepObject, explode: true)
         const params: string[] = [];
-
-        function addQueryParams(obj: Record<string, unknown>, prefix: string) {
-          for (const [key, value] of Object.entries(obj)) {
-            const paramKey = prefix ? `${prefix}[${key}]` : key;
-            if (value === null || value === undefined) continue;
-            if (typeof value === "object" && !Array.isArray(value)) {
-              addQueryParams(value as Record<string, unknown>, paramKey);
-            } else if (Array.isArray(value)) {
-              value.forEach((item, i) => {
-                if (typeof item === "object") {
-                  addQueryParams(item as Record<string, unknown>, `${paramKey}[${i}]`);
-                } else {
-                  params.push(`${encodeURIComponent(`${paramKey}[${i}]`)}=${encodeURIComponent(String(item))}`);
-                }
-              });
-            } else {
-              params.push(`${encodeURIComponent(paramKey)}=${encodeURIComponent(String(value))}`);
-            }
-          }
-        }
-
-        addQueryParams(query as unknown as Record<string, unknown>, "query");
+        addQueryParams(params, query as unknown as Record<string, unknown>, "query");
         if (options?.limit) params.push(`limit=${options.limit}`);
         const effectiveWorkspaceIds = options?.workspaceIds
           ?? (defaultSearchWorkspaceIds?.length ? defaultSearchWorkspaceIds : undefined);
@@ -346,17 +437,48 @@ export function createTanaAPI(
     },
 
     fields: {
+      // Workaround: append mode is broken in Tana API (clears field instead of appending).
+      // For arrays, we set first value via API, then import remaining into the field tuple.
+      // See claudedocs/api-bugs.md
       async setOption(
         nodeId: string,
         attributeId: string,
-        optionId: string,
-        mode?: "replace" | "append"
+        optionId: string | string[],
+        _mode?: "replace" | "append"
       ): Promise<{ success: boolean }> {
-        const result = await client.post<{ nodeId: string; message: string }>(
+        const ids = Array.isArray(optionId) ? optionId : [optionId];
+        if (ids.length === 0) return { success: true };
+
+        // Step 1: set first value via API (creates the field tuple)
+        await client.post<{ nodeId: string; message: string }>(
           `/nodes/${nodeId}/fields/${attributeId}/option`,
-          { optionId, mode }
+          { optionId: ids[0], mode: "replace" }
         );
-        return { success: !!result.nodeId };
+
+        if (ids.length === 1) return { success: true };
+
+        // Step 2: find the field tuple via getChildren
+        const { children } = await client.get<Children>(
+          `/nodes/${nodeId}/children?limit=100`
+        );
+        let tupleId: string | null = null;
+        for (const child of children) {
+          if (child.docType === "tuple") {
+            const sub = await client.get<Children>(
+              `/nodes/${child.id}/children?limit=20`
+            );
+            if (sub.children.some(s => s.id === attributeId)) {
+              tupleId = child.id;
+              break;
+            }
+          }
+        }
+        if (!tupleId) return { success: false };
+
+        // Step 3: import remaining values into the tuple
+        const refs = ids.slice(1).map(id => `- [[^${id}]]`).join("\n");
+        await client.post<ImportResult>(`/nodes/${tupleId}/import`, { content: refs });
+        return { success: true };
       },
 
       async setContent(
@@ -370,6 +492,74 @@ export function createTanaAPI(
           { content, mode }
         );
         return { success: !!result.nodeId };
+      },
+
+      async getFieldOptions(
+        fieldId: string,
+        options?: { tagId?: string; workspaceId?: string; limit?: number }
+      ): Promise<{ id: string; name: string }[]> {
+        const result = await client.get<{ markdown: string }>(
+          `/nodes/${fieldId}?maxDepth=2`
+        );
+        const md = result.markdown;
+
+        // Pattern A: Predetermined options (field definition lists them)
+        if (md.includes("**Options**:")) {
+          return parseOptionsFromMarkdown(md);
+        }
+
+        // Pattern B: Instance of supertag
+        if (md.includes("Options from supertag")) {
+          const sourceTagMatch = md.match(/\(tana:([^)]+)\)/);
+          if (sourceTagMatch) {
+            const params: string[] = [];
+            addQueryParams(params, { hasType: sourceTagMatch[1] } as Record<string, unknown>, "query");
+            if (options?.workspaceId) {
+              params.push(`workspaceIds[0]=${encodeURIComponent(options.workspaceId)}`);
+            }
+            if (options?.limit) params.push(`limit=${options.limit}`);
+            const results = await client.get<SearchResult[]>(`/nodes/search?${params.join("&")}`);
+            return results.map(r => ({ id: r.id, name: r.name }));
+          }
+        }
+
+        // Pattern C: Source search node
+        const searchNodeMatch = md.match(/\*\*Options List\*\*:.*?\(tana:([^)]+)\)/);
+        if (searchNodeMatch) {
+          const searchResult = await client.get<{ markdown: string }>(
+            `/nodes/${searchNodeMatch[1]}?maxDepth=1`
+          );
+          return parseRefsFromMarkdown(searchResult.markdown);
+        }
+
+        // Pattern D: Ad-hoc — sample from existing nodes that have this field set
+        // Extract field name from definition for scoped parsing
+        const fieldNameMatch = md.match(/^- (.+?) #field-definition/m);
+        if (!fieldNameMatch) return [];
+
+        const fieldName = fieldNameMatch[1];
+        const limit = options?.limit ?? 10;
+        const params: string[] = [];
+        const query: Record<string, unknown> = options?.tagId
+          ? { and: [{ hasType: options.tagId }, { field: { fieldId, state: "set" } }] }
+          : { field: { fieldId, state: "set" } };
+        addQueryParams(params, query, "query");
+        if (options?.workspaceId) {
+          params.push(`workspaceIds[0]=${encodeURIComponent(options.workspaceId)}`);
+        }
+        params.push(`limit=${limit}`);
+
+        const searchResults = await client.get<SearchResult[]>(`/nodes/search?${params.join("&")}`);
+        const seen = new Map<string, string>();
+        for (const node of searchResults) {
+          const nodeMd = await client.get<{ markdown: string }>(
+            `/nodes/${node.id}?maxDepth=1`
+          );
+          for (const { id, name } of parseFieldValues(nodeMd.markdown, fieldName)) {
+            if (!seen.has(id)) seen.set(id, name);
+          }
+        }
+        return Array.from(seen, ([id, name]) => ({ id, name }));
       },
     },
 
@@ -389,9 +579,15 @@ export function createTanaAPI(
     },
 
     async import(parentNodeId: string, content: string): Promise<ImportResult> {
-      return client.post<ImportResult>(`/nodes/${parentNodeId}/import`, {
-        content,
-      });
+      // API returns { createdNodes: [{id,name}], ... } — normalize to ImportResult
+      const raw = await client.post<{
+        createdNodes: { id: string; name: string }[];
+        message: string;
+      }>(`/nodes/${parentNodeId}/import`, { content });
+      return {
+        success: true,
+        nodeIds: raw.createdNodes.map(n => n.id),
+      };
     },
 
     format(data: unknown): string {

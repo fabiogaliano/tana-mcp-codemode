@@ -28,8 +28,9 @@ tana.tags.addField({ tagId, name, dataType: "plain"|"number"|"date"|"url"|"email
 tana.tags.setCheckbox({ tagId, showCheckbox, doneStateMapping? })
 
 ### Fields
-tana.fields.setOption(nodeId, attributeId, optionId, mode?)  // mode: "replace" | "append" (default: "replace")
+tana.fields.setOption(nodeId, attributeId, optionId)  // optionId: string | string[] (array for multi-value)
 tana.fields.setContent(nodeId, attributeId, content, mode?)  // content: string | null (null clears field), mode: "replace" | "append"
+tana.fields.getFieldOptions(fieldId, options?) → { id, name }[]  // discover available options for a field
 
 ### Calendar
 tana.calendar.getOrCreate(workspaceId, "day"|"week"|"month"|"year", date?)

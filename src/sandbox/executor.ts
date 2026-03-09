@@ -110,6 +110,8 @@ function createTrackedTanaAPI(
         trackNodeId(nodeId);
         return track("fields.setContent", () => tana.fields.setContent(nodeId, attributeId, content));
       },
+      getFieldOptions: (...args) =>
+        track("fields.getFieldOptions", () => tana.fields.getFieldOptions(...args)),
     },
 
     calendar: {
