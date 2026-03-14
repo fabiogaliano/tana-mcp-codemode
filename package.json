@@ -1,6 +1,6 @@
 {
   "name": "tana-mcp-codemode",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Codemode MCP server for Tana — AI writes TypeScript that executes against Tana Local API",
   "type": "module",
   "main": "dist/entry-node.js",
