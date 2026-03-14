@@ -8,6 +8,7 @@
     "tana-mcp-codemode": "dist/entry-node.js"
   },
   "scripts": {
+    "setup": "bun run scripts/setup.ts",
     "generate": "bun run scripts/generate.ts",
     "list-endpoints": "bun run scripts/list-endpoints.ts",
     "start": "bun run --env-file=.env src/entry-bun.ts",
