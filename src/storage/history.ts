@@ -8,13 +8,13 @@
  * Configure database location via TANA_HISTORY_PATH env var.
  */
 
-import { Database } from "bun:sqlite";
+import { createDatabase, type CompatDatabase } from "../compat";
 import { homedir } from "os";
 import { join, dirname } from "path";
 import { mkdirSync, existsSync } from "fs";
 import type { ScriptRun } from "../types";
 
-let db: Database | null = null;
+let db: CompatDatabase | null = null;
 
 function getDbPath(): string {
   // Allow custom path via env var
@@ -46,7 +46,7 @@ function getDbPath(): string {
   return join(baseDir, "history.db");
 }
 
-function migrateDb(database: Database): void {
+function migrateDb(database: CompatDatabase): void {
   // Get existing columns
   const columns = database
     .prepare("PRAGMA table_info(script_runs)")
@@ -63,18 +63,18 @@ function migrateDb(database: Database): void {
 
   for (const col of newColumns) {
     if (!columnNames.has(col.name)) {
-      database.run(`ALTER TABLE script_runs ADD COLUMN ${col.name} ${col.type}`);
+      database.exec(`ALTER TABLE script_runs ADD COLUMN ${col.name} ${col.type}`);
     }
   }
 }
 
-export function initDb(): Database {
+export function initDb(): CompatDatabase {
   if (db) return db;
 
   const dbPath = getDbPath();
-  db = new Database(dbPath, { create: true });
+  db = createDatabase(dbPath);
 
-  db.run(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS script_runs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       timestamp INTEGER NOT NULL,
@@ -94,22 +94,22 @@ export function initDb(): Database {
   // Migrate existing databases
   migrateDb(db);
 
-  db.run(`
+  db.exec(`
     CREATE INDEX IF NOT EXISTS idx_script_runs_timestamp
     ON script_runs(timestamp DESC)
   `);
 
-  db.run(`
+  db.exec(`
     CREATE INDEX IF NOT EXISTS idx_script_runs_session
     ON script_runs(session_id)
   `);
 
-  db.run(`
+  db.exec(`
     CREATE INDEX IF NOT EXISTS idx_script_runs_workspace
     ON script_runs(workspace_id)
   `);
 
-  return db;
+  return db!;
 }
 
 export interface SaveScriptRunOptions {

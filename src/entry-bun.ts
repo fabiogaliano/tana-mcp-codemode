@@ -1,5 +1,4 @@
 #!/usr/bin/env bun
-// Backward-compat shim — use src/entry-bun.ts directly
 import { initCompat } from "./compat";
 import { bunCompat } from "./compat/bun";
 import { main } from "./main";

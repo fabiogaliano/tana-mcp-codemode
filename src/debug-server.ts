@@ -9,6 +9,8 @@
  * In dev mode, proxies to Vite for hot-reload and dynamic glob resolution.
  */
 
+import { initCompat } from "./compat";
+import { bunCompat } from "./compat/bun";
 import { createClient } from "./api/client";
 import { createTanaAPI } from "./api/tana";
 import { executeSandbox } from "./sandbox/executor";
@@ -83,6 +85,7 @@ async function proxyToVite(req: Request): Promise<Response> {
 }
 
 async function main() {
+  initCompat(bunCompat);
   initDb();
 
   // Start Vite dev server for dynamic glob resolution

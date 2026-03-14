@@ -13,6 +13,7 @@ import type { SandboxResult } from "../types";
 import type { TanaAPI } from "../api/tana";
 import { saveScriptRun } from "../storage/history";
 import { createWorkflowHelper } from "./workflow";
+import { transpileTS } from "../compat";
 
 const EXECUTION_TIMEOUT = 10_000; // 10 seconds
 
@@ -192,8 +193,7 @@ export async function executeSandbox(
       "exports",
     ];
 
-    const transpiler = new Bun.Transpiler({ loader: "ts" });
-    const jsCode = transpiler.transformSync(code);
+    const jsCode = transpileTS(code);
 
     const fn = new AsyncFunction(
       "tana",

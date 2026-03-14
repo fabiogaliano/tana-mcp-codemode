@@ -11,7 +11,7 @@
  *   workflow.complete("Done!");
  */
 
-import { Database } from "bun:sqlite";
+import type { CompatDatabase } from "../compat";
 import { initDb } from "../storage/history";
 
 export type WorkflowEventType =
@@ -45,10 +45,10 @@ export interface WorkflowHelper {
 
 let workflowTableInitialized = false;
 
-function ensureWorkflowTable(db: Database): void {
+function ensureWorkflowTable(db: CompatDatabase): void {
   if (workflowTableInitialized) return;
 
-  db.run(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS workflow_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       session_id TEXT NOT NULL,
@@ -59,7 +59,7 @@ function ensureWorkflowTable(db: Database): void {
     )
   `);
 
-  db.run(`
+  db.exec(`
     CREATE INDEX IF NOT EXISTS idx_workflow_session
     ON workflow_events(session_id, timestamp)
   `);

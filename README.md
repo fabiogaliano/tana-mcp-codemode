@@ -1,314 +1,126 @@
-# Tana MCP Server
+# tana-mcp-codemode
 
-A codemode MCP server for [Tana](https://tana.inc) knowledge management. AI writes TypeScript code that executes against the Tana Local API.
+Codemode MCP server for [Tana](https://tana.inc). Instead of structured API calls, your AI writes TypeScript that executes directly against the Tana Local API.
 
-## Features
+## Install
 
-- **Codemode Pattern** — AI writes executable TypeScript, not structured API calls
-- **Tana Local API** — Workspaces, nodes, tags, fields, calendar, import
-- **Top-level Await** — `await tana.workspaces.list()` works directly
-- **Timeout Protection** — 10s max execution prevents infinite loops
-- **Script History** — SQLite persistence for debugging and replay
-- **Retry Logic** — Exponential backoff for transient failures
-- **Debug UI** — WebSocket-based dashboard for testing scripts
+### Binary (no runtime required)
 
-## Requirements
+Download from [GitHub Releases](https://github.com/fabiogaliano/tana-mcp-codemode/releases) for your platform:
 
-- [Bun](https://bun.sh) runtime
-- [Tana Desktop](https://tana.inc) with Local API enabled
-- API token from Tana (Settings → API → Generate Token)
-
-## Installation
-
-### Option 1: bun (recommended)
+| Platform | File |
+|----------|------|
+| macOS ARM | `tana-mcp-codemode-darwin-arm64` |
+| macOS Intel | `tana-mcp-codemode-darwin-x64` |
+| Linux x64 | `tana-mcp-codemode-linux-x64` |
+| Linux ARM | `tana-mcp-codemode-linux-arm64` |
+| Windows | `tana-mcp-codemode-windows-x64.exe` |
 
 ```bash
-# Requires Bun runtime
-bun add -g tana-mcp-codemode
+chmod +x tana-mcp-codemode-darwin-arm64
+./tana-mcp-codemode-darwin-arm64
 ```
 
-### Option 2: From source
+### npm (requires Node.js ≥ 20)
+
+```bash
+npm install -g tana-mcp-codemode
+# or run without installing:
+npx tana-mcp-codemode
+```
+
+### From source (requires Bun)
 
 ```bash
 git clone https://github.com/fabiogaliano/tana-mcp-codemode
 cd tana-mcp-codemode
 bun install
+bun run src/entry-bun.ts
 ```
 
-## Configuration
+## Prerequisites
 
-| Variable                | Default                 | Description                                                    |
-| ----------------------- | ----------------------- | -------------------------------------------------------------- |
-| `TANA_API_TOKEN`        | (required)              | Bearer token from Tana Desktop                                 |
-| `TANA_API_URL`          | `http://127.0.0.1:8262` | Tana Local API URL                                             |
-| `TANA_TIMEOUT`          | `10000`                 | Request timeout in ms                                          |
-| `TANA_HISTORY_PATH`     | (platform default)      | Custom path for SQLite history database                        |
-| `MAIN_TANA_WORKSPACE`   | (none)                  | Default workspace name or ID, resolved at startup              |
-| `TANA_SEARCH_WORKSPACES`| (none)                  | Comma-separated workspace names or IDs for default search scoping |
+- [Tana Desktop](https://tana.inc) with **Local API enabled** (Settings → Local API → Enable)
+- An API token from Tana (Settings → API → Generate Token)
 
-## MCP Integration
+## MCP Configuration
 
-Add to your MCP client's configuration:
+Add to your MCP client config (e.g. `claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "tana": {
-      "command": "tana-mcp-codemode",
+      "command": "/path/to/tana-mcp-codemode-darwin-arm64",
       "env": {
-        "TANA_API_TOKEN": "your_token_here",
-        // Optional
-        "MAIN_TANA_WORKSPACE": "My Workspace",
-        "TANA_SEARCH_WORKSPACES": "My Workspace",
-        // Optional: customize where the SQLite history database is stored
-        "TANA_HISTORY_PATH": "/path/to/history.db"
+        "TANA_API_TOKEN": "your-token-here",
+        "MAIN_TANA_WORKSPACE": "My Workspace"
       }
     }
   }
 }
 ```
 
-| Client            | Config Location                                             |
-| ----------------- | ----------------------------------------------------------- |
-| Claude Desktop    | `claude_desktop_config.json`                                |
-| Claude Code       | `.mcp.json` (project) or `~/.claude/settings.json` (global) |
-| Cursor / Windsurf | IDE MCP settings                                            |
+For npm install, use `"command": "tana-mcp-codemode"`. For source, use `"command": "bun"` with `"args": ["run", "/path/to/src/entry-bun.ts"]`.
 
-**If installed from source**, use `bun` as the command:
+## Environment Variables
 
-```json
-{
-  "mcpServers": {
-    "tana": {
-      "command": "bun",
-      "args": ["run", "/path/to/tana-mcp-codemode/src/index.ts"],
-      "env": {
-        "TANA_API_TOKEN": "your_token_here",
-        // Optional
-        "MAIN_TANA_WORKSPACE": "My Workspace",
-        "TANA_SEARCH_WORKSPACES": "My Workspace",
-        // Optional: customize where the SQLite history database is stored
-        "TANA_HISTORY_PATH": "/path/to/history.db"
-      }
-    }
-  }
-}
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TANA_API_TOKEN` | (required) | Bearer token from Tana Desktop |
+| `TANA_API_URL` | `http://127.0.0.1:8262` | Tana Local API URL |
+| `MAIN_TANA_WORKSPACE` | (none) | Default workspace name or ID |
+| `TANA_SEARCH_WORKSPACES` | (none) | Comma-separated workspaces for search scope |
+| `TANA_TIMEOUT` | `10000` | Request timeout in ms |
+| `TANA_HISTORY_PATH` | (platform default) | Custom SQLite history path |
 
-## Examples
+## Usage Examples
 
-### Search for nodes
+Search for nodes:
 
 ```typescript
-const results = await tana.nodes.search({
-  textContains: "meeting notes"
+const results = await tana.nodes.search("project ideas", {
+  workspaceIds: [tana.workspace.id]
 });
-console.log("Found:", results.length, "nodes");
+console.log(results.map(n => n.name));
 ```
 
-### Complex query
+Import content with tags and fields:
 
 ```typescript
-const tasks = await tana.nodes.search({
-  and: [
-    { hasType: "taskTagId" },
-    { is: "todo" },
-    { created: { last: 7 } }
-  ]
-});
-console.log({ tasks });
-```
-
-### Import content
-
-```typescript
-await tana.import(parentNodeId, `
-- Project Alpha #[[^projectTagId]]
-  - [[^statusFieldId]]:: Active
-  - [[^dueDateFieldId]]:: [[date:2024-03-15]]
+await tana.import(tana.workspace.id, `
+%%tana%%
+- Meeting notes #meeting
+  - Date:: [[2024-01-15]]
+  - Attendees:: Alice, Bob
+  - Summary:: Discussed Q1 roadmap
 `);
-```
-
-## Debug UI
-
-A WebSocket-based dashboard for testing scripts:
-
-```bash
-# Start debug server
-bun run src/debug-server.ts
-
-# Open http://localhost:3333
-```
-
-**Routes:**
-- `http://localhost:3333/#debug` — Script execution console
-- `http://localhost:3333/#benchmark` — Codemode vs tana-local performance comparison
-
-**Features:**
-- Real-time script execution
-- Workflow event timeline
-- Error display with suggestions
-- Benchmark results visualization (cost, speed, token usage)
-
-### workflow Helper (Debug UI only)
-
-Track multi-step operations with a timeline view:
-
-```typescript
-workflow.start("Processing nodes");
-workflow.step("Fetching workspaces");
-workflow.progress(5, 100, "Processing");
-workflow.complete("Done!");
-// Or: workflow.abort("Error message");
-```
-
-> **Note**: `workflow` is only available in the Debug UI. It's not exposed in the production MCP prompt.
-
-### Building the React UI (optional)
-
-```bash
-cd ui
-bun install
-bun run build
-cd ..
-bun run src/debug-server.ts
-```
-
-## Architecture
-
-```
-src/
-├── index.ts              # MCP server entry
-├── prompts.ts            # Tool description
-├── types.ts              # TypeScript interfaces
-├── debug-server.ts       # WebSocket debug UI
-├── api/
-│   ├── client.ts         # HTTP client (auth, retry, timeouts)
-│   ├── tana.ts           # API wrapper → `tana` object
-│   └── types.ts          # API type definitions
-├── sandbox/
-│   ├── executor.ts       # Code execution engine
-│   └── workflow.ts       # Progress tracking
-├── storage/
-│   └── history.ts        # SQLite script history
-└── generated/
-    └── api.d.ts          # Generated OpenAPI types
-
-ui/                       # React debug dashboard
-```
-
-### How It Works
-
-1. AI sends TypeScript code to the `execute` tool
-2. `executor.ts` creates an AsyncFunction for top-level await
-3. Code runs with injected `tana` and `console` objects
-4. 10s timeout via Promise.race prevents hangs
-5. `console.log()` output is captured and returned
-6. Script run is saved to SQLite history
-
-## Script History
-
-Runs are persisted to SQLite:
-
-| Platform | Location                                            |
-| -------- | --------------------------------------------------- |
-| macOS    | `~/Library/Application Support/tana-mcp/history.db` |
-| Windows  | `%APPDATA%/tana-mcp/history.db`                     |
-| Linux    | `~/.local/share/tana-mcp/history.db`                |
-
-Old runs (>30 days) are automatically cleaned up on startup.
-
-### What Gets Saved
-
-Each script run records:
-
-| Field               | Description                           |
-| ------------------- | ------------------------------------- |
-| `script`            | The TypeScript code that was executed |
-| `output`            | Captured `console.log()` output       |
-| `error`             | Error message if execution failed     |
-| `api_calls`         | Which Tana API methods were called    |
-| `node_ids_affected` | Node IDs that were read/modified      |
-| `workspace_id`      | Workspace used (if detected)          |
-| `duration_ms`       | Execution time                        |
-
-## Development
-
-```bash
-# Dev mode with watch
-bun run dev
-
-# Type check
-bun run typecheck
-
-# Regenerate API types from OpenAPI spec
-bun run generate
-
-# Run debug server
-bun run debug
 ```
 
 ## API Reference
 
-The server exposes a single `execute` tool. AI writes TypeScript code with access to the `tana` object:
+| Namespace | Methods |
+|-----------|---------|
+| `tana.workspace` | Pre-resolved default workspace |
+| `tana.workspaces` | `list()` |
+| `tana.nodes` | `search()`, `read()`, `getChildren()`, `edit()`, `move()`, `trash()`, `check()`, `uncheck()`, `open()` |
+| `tana.tags` | `listAll()`, `getSchema()`, `create()`, `modify()`, `addField()`, `setCheckbox()` |
+| `tana.fields` | `setOption()`, `setContent()`, `getFieldOptions()` |
+| `tana.calendar` | `getOrCreate()` |
+| `tana.import()` | Import Tana Paste content |
+| `tana.health()` | API health check |
 
-### Workspaces
+## Development
 
-```typescript
-const workspaces = await tana.workspaces.list();
-// → Workspace[] (id, name, homeNodeId)
-```
-
-### Nodes
-
-```typescript
-await tana.nodes.search(query, options?)     // → SearchResult[]
-await tana.nodes.read(nodeId, maxDepth?)     // → string (markdown)
-await tana.nodes.getChildren(nodeId, opts?)  // → { children, total, hasMore }
-await tana.nodes.edit({ nodeId, name?, description? })
-await tana.nodes.trash(nodeId)
-await tana.nodes.check(nodeId)               // mark done
-await tana.nodes.uncheck(nodeId)             // mark undone
-```
-
-### Tags (Supertags)
-
-```typescript
-await tana.tags.listAll(workspaceId)              // All workspace supertags (paginated)
-await tana.tags.getSchema(tagId, opts?)            // opts: { includeInheritedFields? }
-await tana.tags.modify(nodeId, action, tagIds)     // action: "add" | "remove"
-await tana.tags.create({ workspaceId, name, description?, extendsTagIds?, showCheckbox? })
-await tana.tags.addField({ tagId, name, dataType, ... })
-await tana.tags.setCheckbox({ tagId, showCheckbox, doneStateMapping? })
-```
-
-### Fields
-
-```typescript
-await tana.fields.setOption(nodeId, attributeId, optionId)   // dropdown fields
-await tana.fields.setContent(nodeId, attributeId, content)   // text/date/url fields
-```
-
-### Calendar
-
-```typescript
-await tana.calendar.getOrCreate(workspaceId, granularity, date?)
-// granularity: "day" | "week" | "month" | "year"
-```
-
-### Import (Tana Paste)
-
-```typescript
-await tana.import(parentNodeId, tanaPasteContent)
-// → { success, nodeIds?, error? }
-```
-
-### Utility
-
-```typescript
-tana.workspace                // Pre-resolved default workspace (from MAIN_TANA_WORKSPACE) or null
-tana.format(data)             // Compact display of any API response
-await tana.health()           // → { status: "ok" }
+```bash
+bun install          # Install deps
+bun run start        # Start MCP server
+bun run dev          # Dev mode with watch
+bun run test         # Run tests
+bun run typecheck    # Type check
+bun run build        # Build Node.js dist (tsup)
+bun run build:binary # Build self-contained binary
+bun run debug        # Debug UI at localhost:3333
 ```
 
 ## License

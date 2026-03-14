@@ -3,31 +3,28 @@
   "version": "0.2.3",
   "description": "Codemode MCP server for Tana — AI writes TypeScript that executes against Tana Local API",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/entry-node.js",
   "bin": {
-    "tana-mcp-codemode": "src/index.ts"
+    "tana-mcp-codemode": "dist/entry-node.js"
   },
   "scripts": {
     "generate": "bun run scripts/generate.ts",
     "list-endpoints": "bun run scripts/list-endpoints.ts",
-    "start": "bun run --env-file=.env src/index.ts",
-    "dev": "bun run --env-file=.env --watch src/index.ts",
+    "start": "bun run --env-file=.env src/entry-bun.ts",
+    "dev": "bun run --env-file=.env --watch src/entry-bun.ts",
     "debug": "bun run --env-file=.env src/debug-server.ts",
+    "build": "tsup",
+    "build:binary": "bun build --compile src/entry-bun.ts --outfile dist/tana-mcp-codemode",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit",
-    "prepublishOnly": "bun run typecheck",
+    "prepublishOnly": "bun run typecheck && bun run build",
     "release:patch": "npm version patch && npm publish",
     "release:minor": "npm version minor && npm publish",
     "release:major": "npm version major && npm publish"
   },
   "files": [
-    "src/index.ts",
-    "src/prompts.ts",
-    "src/types.ts",
-    "src/api",
-    "src/sandbox",
-    "src/storage",
-    "src/generated",
+    "dist/",
+    "src/",
     "README.md"
   ],
   "keywords": [
@@ -43,15 +40,21 @@
     "url": "git+https://github.com/fabiogaliano/tana-mcp-codemode.git"
   },
   "engines": {
-    "bun": ">=1.0.0"
+    "bun": ">=1.0.0",
+    "node": ">=20"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.3",
     "zod": "^3"
   },
+  "optionalDependencies": {
+    "better-sqlite3": "^11",
+    "esbuild": "^0.24"
+  },
   "devDependencies": {
     "@types/bun": "^1.3.8",
     "openapi-typescript": "^7.10.1",
+    "tsup": "^8",
     "typescript": "^5.9.3"
   },
   "license": "MIT"
