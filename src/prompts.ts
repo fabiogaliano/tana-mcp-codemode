@@ -74,6 +74,7 @@ console.log() output becomes LLM context. Keep it compact:
 
 ## API Notes
 
+- **WARNING ON BULK UPDATES**: NEVER use tana.nodes.trash() followed by tana.import() to bulk-edit existing nodes. This destroys user data. Always update existing nodes individually using tana.fields.setContent or tana.nodes.edit.
 - search: no offset/pagination — use narrower queries, not repeated calls
 - getChildren: only endpoint with pagination (limit + offset)
 - Timeout is 10s. On timeout, try a different approach, not the same call.

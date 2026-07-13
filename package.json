@@ -11,6 +11,7 @@
     "setup": "bun run scripts/setup.ts",
     "generate": "bun run scripts/generate.ts",
     "list-endpoints": "bun run scripts/list-endpoints.ts",
+    "check-api": "bun run scripts/check-api-version.ts",
     "start": "bun run --env-file=.env src/entry-bun.ts",
     "dev": "bun run --env-file=.env --watch src/entry-bun.ts",
     "debug": "bun run --env-file=.env src/debug-server.ts",
