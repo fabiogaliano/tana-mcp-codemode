@@ -78,7 +78,7 @@ await tana.import(tana.workspace.id, `
 | `tana.workspace` | pre-resolved default workspace |
 | `tana.workspaces` | `list()` |
 | `tana.nodes` | `search()`, `read()`, `getChildren()`, `edit()`, `move()`, `trash()`, `check()`, `uncheck()`, `open()` |
-| `tana.tags` | `listAll()`, `getSchema()`, `create()`, `modify()`, `addField()`, `setCheckbox()` |
+| `tana.tags` | `listAll()`, `getSchema()`, `getParents()`, `create()`, `modify()`, `addField()`, `setCheckbox()` |
 | `tana.fields` | `setOption()`, `setContent()`, `getFieldOptions()` |
 | `tana.calendar` | `getOrCreate()` |
 | `tana.import()` | import Tana Paste content |

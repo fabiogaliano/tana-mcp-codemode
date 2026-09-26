@@ -216,11 +216,9 @@ describe("format (unit)", () => {
       expect(format(undefined)).toBe("undefined");
     });
 
-    it("falls back to JSON for unknown objects", () => {
+    it("falls back to compact JSON for unknown objects", () => {
       const data = { foo: "bar", count: 42 };
-      const result = format(data);
-      expect(result).toContain('"foo"');
-      expect(result).toContain('"bar"');
+      expect(format(data)).toBe('{"foo":"bar","count":42}');
     });
 
     it("falls back to JSON for unknown arrays", () => {

@@ -18,6 +18,7 @@ import type {
   EditNodeOptions,
   MoveNodeOptions,
   Tag,
+  TagParent,
   CreateTagOptions,
   AddFieldOptions,
   SetCheckboxOptions,
@@ -66,6 +67,21 @@ function parseOptionsFromMarkdown(md: string): { id: string; name: string }[] {
     }
   }
   return results;
+}
+
+/**
+ * Parse a tag schema's `Extends #a (id:x), #b (base type) (id:y)` line.
+ * Models misread this prose (a built-in `(base type)` parent looked like a
+ * self-reference), so inheritance is handed to them as data instead.
+ */
+export function parseTagParents(md: string): TagParent[] {
+  const line = md.split("\n").find((l) => l.startsWith("Extends"));
+  if (!line) return [];
+  return [...line.matchAll(/#(.+?)\s+(\(base type\)\s+)?\(id:([^)]+)\)/g)].map((m) => ({
+    id: m[3],
+    name: m[1],
+    baseType: m[2] !== undefined,
+  }));
 }
 
 /** Parse `[name](tana:id)` references from markdown */
@@ -181,6 +197,8 @@ export interface TanaAPI {
     listAll(workspaceId: string): Promise<Tag[]>;
     /** Get tag schema */
     getSchema(tagId: string, includeEditInstructions?: boolean, includeInheritedFields?: boolean): Promise<string>;
+    /** Direct parent tags; baseType marks Tana built-ins like #task or #day */
+    getParents(tagId: string): Promise<TagParent[]>;
     /** Add/remove tags from a node */
     modify(
       nodeId: string,
@@ -381,6 +399,13 @@ export function createTanaAPI(
           `/tags/${tagId}/schema?includeEditInstructions=${includeEditInstructions}&includeInheritedFields=${includeInheritedFields}`
         );
         return truncateOptionLists(result.markdown);
+      },
+
+      async getParents(tagId: string): Promise<TagParent[]> {
+        const result = await client.get<{ markdown: string }>(
+          `/tags/${tagId}/schema?includeEditInstructions=false&includeInheritedFields=true`
+        );
+        return parseTagParents(result.markdown);
       },
 
       async modify(

@@ -116,9 +116,9 @@ export function format(data: unknown): string {
     }
   }
 
-  // Fallback: pretty JSON
+  // Fallback: compact JSON, since the reader is a model, not a person
   try {
-    return JSON.stringify(data, null, 2);
+    return JSON.stringify(data);
   } catch {
     return String(data);
   }

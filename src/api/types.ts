@@ -35,6 +35,14 @@ export type ChildNode = Children["children"][number];
 export type Tag =
   operations["tags.list"]["responses"]["200"]["content"]["application/json"][number];
 
+/** Parent tag parsed from a schema's Extends line */
+export interface TagParent {
+  id: string;
+  name: string;
+  /** Tana built-in type such as #task or #day */
+  baseType: boolean;
+}
+
 /** Tag schema response (markdown) */
 export type TagSchemaResponse =
   operations["tags.getSchema"]["responses"]["200"]["content"]["application/json"];

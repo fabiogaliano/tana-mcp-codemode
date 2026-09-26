@@ -86,8 +86,12 @@ function createTrackedTanaAPI(
         tracker.workspaceId = workspaceId;
         return track("tags.listAll", () => tana.tags.listAll(workspaceId));
       },
-      getSchema: (tagId, includeEditInstructions) =>
-        track("tags.getSchema", () => tana.tags.getSchema(tagId, includeEditInstructions)),
+      getSchema: (tagId, includeEditInstructions, includeInheritedFields) =>
+        track("tags.getSchema", () =>
+          tana.tags.getSchema(tagId, includeEditInstructions, includeInheritedFields)
+        ),
+      getParents: (tagId) =>
+        track("tags.getParents", () => tana.tags.getParents(tagId)),
       modify: (nodeId, action, tagIds) => {
         trackNodeId(nodeId);
         return track("tags.modify", () => tana.tags.modify(nodeId, action, tagIds));
@@ -270,7 +274,8 @@ function formatArg(arg: unknown): string {
   if (typeof arg === "string") return arg;
   if (typeof arg === "number" || typeof arg === "boolean") return String(arg);
   try {
-    return JSON.stringify(arg, null, 2);
+    // Compact: pretty-printing costs ~2x the tokens and the model parses either
+    return JSON.stringify(arg);
   } catch {
     return String(arg);
   }

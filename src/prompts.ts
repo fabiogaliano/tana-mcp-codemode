@@ -22,6 +22,7 @@ tana.nodes.check(nodeId) / uncheck(nodeId) → { success }
 ### Tags
 tana.tags.listAll(workspaceId) → Tag[] (workspace supertags only — for schema analysis)
 tana.tags.getSchema(tagId) → string
+tana.tags.getParents(tagId) → { id, name, baseType }[] (direct parents; baseType = Tana built-in like #task)
 tana.tags.modify(nodeId, "add"|"remove", tagIds[])
 tana.tags.create({ workspaceId, name, description?, extendsTagIds?, showCheckbox? })
 tana.tags.addField({ tagId, name, dataType: "plain"|"number"|"date"|"url"|"email"|"checkbox"|"user"|"instance"|"options", ... })
@@ -81,7 +82,7 @@ console.log() output becomes LLM context. Keep it compact:
 - childOf/ownedBy/inWorkspace operators broken. Scope by workspace: search(query, { workspaceIds: ["id"] })
 - Tag names are not unique. Find a tag by name: search({ and: [{ hasType: "SYS_T01" }, { textContains: "name" }] })
 - search results: { id, name, breadcrumb[], tags[{id,name}], tagIds[], workspaceId, docType, description, created, inTrash }
-- getSchema output: line 1 is \`# Tag definition: name (id:xxx)\`. Line 2 is \`Extends #parent (id:xxx)\` when tag has inheritance, or \`Extends #parent (base type) (id:xxx)\` for Tana built-in types. Parse "Extends" to find relationships.
+- Tag inheritance: use tags.getParents(tagId), not getSchema's "Extends" line.
 
 ## Examples
 
